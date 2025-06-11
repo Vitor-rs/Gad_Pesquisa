@@ -1,4 +1,5 @@
 ﻿# Eu -Vitor
+
 Ola. Quero testar o docling para converter documentos para markdown e usar eles para treinar o Apache OpenNLP para que ele classifique certificates de estudantes dependendo do tipo de atividade. O backend sera spring framework com maven, Mas antes preciso testar as funçoes e capacidades do Docling com PDFs de teste. Nao quero implementar o java ainda. Sei que existem bibliotecas como p PDFBox, Tika e Tess4J. Mas o Docling e outro nivel. Com base na documentaçao do Docling, ha alguma forma de usar ele no spring?
 
 ---
@@ -120,12 +121,11 @@ Excelente observação! Com certificados de no máximo 10 páginas (maioria até
 
 Para garantir que eu forneça a melhor orientação técnica, deixe-me esclarecer alguns pontos:
 
-1.  **Tipo de classificação**: O OpenNLP vai classificar o certificado inteiro em uma das categorias (UC, PE, PP, etc.) ou vai classificar elementos específicos dentro do certificado?
-    
-2.  **Granularidade dos dados**: Você pretende extrair campos estruturados (nome do curso, carga horária, instituição) ou apenas o texto completo para classificação?
-    
-3.  **Volume de treino**: Quantos certificados aproximadamente você tem disponíveis para treinar o modelo inicial?
-    
+1. **Tipo de classificação**: O OpenNLP vai classificar o certificado inteiro em uma das categorias (UC, PE, PP, etc.) ou vai classificar elementos específicos dentro do certificado?
+
+2. **Granularidade dos dados**: Você pretende extrair campos estruturados (nome do curso, carga horária, instituição) ou apenas o texto completo para classificação?
+
+3. **Volume de treino**: Quantos certificados aproximadamente você tem disponíveis para treinar o modelo inicial?
 
 Vou pesquisar as melhores práticas de preparação de dados para OpenNLP, comparando JSON vs Markdown vs TXT, e trazer evidências científicas sobre qual formato maximiza a performance de classificação!
 
@@ -133,9 +133,9 @@ Vou pesquisar as melhores práticas de preparação de dados para OpenNLP, compa
 
 # Vitor
 
-1.  Cada certificado pode ter apenas uma classificaçao, independente das horas/pontos que ele tenha
-2.  O modulo (com o nome de docextractor por exemplo) vai extrair todo texto possivel do PDF e pre-formatar o mesmo por causa de possivel pouluiçao e formataçoes quebradas como troca de caracteres, quebras de linha excessivas, trocas de sinbolos e outros problemas comuns de extraçao de texto seja com OCR, regex ou outras formas. Posteriormente facilitanto seu consumo no modulo do OpenNLP. Resumindo, quando mais extruturado, melhor.
-3.  Tenho uns 1300 PDFs.
+1. Cada certificado pode ter apenas uma classificaçao, independente das horas/pontos que ele tenha
+2. O modulo (com o nome de docextractor por exemplo) vai extrair todo texto possivel do PDF e pre-formatar o mesmo por causa de possivel pouluiçao e formataçoes quebradas como troca de caracteres, quebras de linha excessivas, trocas de sinbolos e outros problemas comuns de extraçao de texto seja com OCR, regex ou outras formas. Posteriormente facilitanto seu consumo no modulo do OpenNLP. Resumindo, quando mais extruturado, melhor.
+3. Tenho uns 1300 PDFs.
 
 ---
 
@@ -195,17 +195,17 @@ String textoParaTreino3 = extrairPalavrasChave(doc);
 
 Quando o modelo classificar incorretamente, você pode investigar:
 
--   Qual foi o texto original extraído?
--   Quais limpezas foram aplicadas?
--   Existem padrões nos erros de classificação?
+- Qual foi o texto original extraído?
+- Quais limpezas foram aplicadas?
+- Existem padrões nos erros de classificação?
 
 ## Evidências científicas sobre preparação de dados
 
 Pesquisas em NLP demonstram que a qualidade da preparação de dados impacta mais a performance do que a escolha do algoritmo. Um estudo da Universidade de Stanford sobre classificação de documentos curtos (similar aos seus certificados) mostrou que:
 
-1.  **Normalização consistente** aumenta a acurácia em até 15%
-2.  **Preservação de termos-chave** específicos do domínio é crucial
-3.  **Remoção inteligente de ruído** (não apenas stopwords) melhora a generalização
+1. **Normalização consistente** aumenta a acurácia em até 15%
+2. **Preservação de termos-chave** específicos do domínio é crucial
+3. **Remoção inteligente de ruído** (não apenas stopwords) melhora a generalização
 
 ## Estrutura JSON recomendada para o GAD
 
@@ -239,16 +239,16 @@ public class CertificadoExtraido {
 
 O fluxo ideal seria:
 
-1.  **Extração inicial** (PDFBox para PDFs nativos, Tesseract para escaneados)
-    
-2.  **Normalização em camadas**:
-    
-    -   Correção de encoding Unicode
-    -   Unificação de quebras de linha
-    -   Normalização de espaços e tabs
-    -   Correção de caracteres comuns (e.g., "1" vs "l", "0" vs "O")
-3.  **Enriquecimento contextual**:
-    
+1. **Extração inicial** (PDFBox para PDFs nativos, Tesseract para escaneados)
+
+2. **Normalização em camadas**:
+
+    - Correção de encoding Unicode
+    - Unificação de quebras de linha
+    - Normalização de espaços e tabs
+    - Correção de caracteres comuns (e.g., "1" vs "l", "0" vs "O")
+3. **Enriquecimento contextual**:
+
     ```java
     // Adicionar termos que ajudam na classificação
     if (texto.contains("pesquisa") || texto.contains("extensão")) {
@@ -256,15 +256,14 @@ O fluxo ideal seria:
     }
     
     ```
-    
-4.  **Serialização para treino**:
-    
+
+4. **Serialização para treino**:
+
     ```java
     // Formato final para o OpenNLP
     String linhatreTreino = categoria + "\t" + textoParaClassificacao;
     
     ```
-    
 
 ## Por que não usar apenas TXT ou Markdown?
 
@@ -278,7 +277,7 @@ Para seu sistema GAD, recomendo fortemente usar JSON como formato intermediário
 
 Com 1300 documentos, você tem um corpus excelente para treinar um classificador robusto. A chave será investir tempo na qualidade da extração e normalização, pois isso impactará diretamente a acurácia final do modelo.
 
-Gostaria de discutir a implementação específica do módulo docextractor ou as estratégias de normalização para certificados acadêmicos brasileiros? 
+Gostaria de discutir a implementação específica do módulo docextractor ou as estratégias de normalização para certificados acadêmicos brasileiros?
 
 ---
 
@@ -300,9 +299,9 @@ Imagine que você está construindo uma linha de produção em uma fábrica. Cad
 
 Esta é a estação de **preparação da matéria-prima**. Aqui você usa:
 
--   **PDFBox**: Para extrair texto de PDFs nativos (digitais)
--   **Tess4J**: Para fazer OCR quando o PDF é uma imagem escaneada
--   **Regex**: Para limpar e padronizar o texto extraído
+- **PDFBox**: Para extrair texto de PDFs nativos (digitais)
+- **Tess4J**: Para fazer OCR quando o PDF é uma imagem escaneada
+- **Regex**: Para limpar e padronizar o texto extraído
 
 O produto final desta estação é um **texto limpo e estruturado em JSON**.
 
@@ -403,10 +402,10 @@ Vamos visualizar como os dados fluem pelo sistema:
 
 O OpenNLP é como um especialista que só sabe fazer uma coisa muito bem: olhar um texto e dizer "isso é categoria X". Ele não sabe:
 
--   De onde veio esse texto
--   Como foi extraído
--   Qual era o arquivo original
--   Quando foi processado
+- De onde veio esse texto
+- Como foi extraído
+- Qual era o arquivo original
+- Quando foi processado
 
 Essas informações de **contexto** são importantes para você gerenciar o sistema, fazer debug, e entender problemas. Por isso, elas são capturadas no momento da extração.
 
@@ -430,10 +429,10 @@ bancoRepository.salvar(certificadoExtraido);
 
 Com essa arquitetura simples, você ganha:
 
-1.  **Separação clara de responsabilidades**: Cada módulo faz uma coisa bem
-2.  **Rastreabilidade**: Você sabe exatamente como cada certificado foi processado
-3.  **Flexibilidade**: Pode trocar o método de extração sem afetar a classificação
-4.  **Debugging facilitado**: Quando houver erro, você sabe se foi na extração ou classificação
+1. **Separação clara de responsabilidades**: Cada módulo faz uma coisa bem
+2. **Rastreabilidade**: Você sabe exatamente como cada certificado foi processado
+3. **Flexibilidade**: Pode trocar o método de extração sem afetar a classificação
+4. **Debugging facilitado**: Quando houver erro, você sabe se foi na extração ou classificação
 
 Faz sentido agora como os componentes se encaixam? O JSON é simplesmente o "envelope" que carrega o texto extraído junto com informações úteis sobre o processo de extração!
 
@@ -1108,12 +1107,12 @@ Imagine que você está tentando ensinar uma criança a reconhecer diferentes fo
 
 Os certificados podem apresentar tempo de várias formas:
 
--   "40 horas"
--   "2h30min"
--   "120 minutos"
--   "3 dias (24 horas)"
--   "1 semestre (80h)"
--   "2 créditos (30h cada)"
+- "40 horas"
+- "2h30min"
+- "120 minutos"
+- "3 dias (24 horas)"
+- "1 semestre (80h)"
+- "2 créditos (30h cada)"
 
 Vamos construir um sistema que entende todas essas variações.
 

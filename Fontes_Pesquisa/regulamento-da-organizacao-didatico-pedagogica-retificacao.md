@@ -12,7 +12,7 @@ A PRESIDENTE  DO  CONSELHO  SUPERIOR  DO  INSTITUTO  FEDERAL  DE  EDUCAÇÃO,  C
 
 Art. 1º  Retificar o art. 45-A, da Resolução Cosup/IFMS nº 40, de 25 de outubro de 2024, publicada no Boletim de Serviço  nº  188,  de  25  de  outubro  de  2024,  referente  ao Regulamento  da  Organização  Didático-Pedagógica  do Instituto Federal de Educação, Ciência e Tecnologia de Mato Grosso do Sul,  conforme a seguir:
 
-## ONDE SE LÊ:
+## ONDE SE LÊ
 
 Art. 45-A.  O estudante matriculado em curso técnico integrado, incluindo os da modalidade da educação de jovens  e  adultos,  e  em  curso  técnico  subsequente,  que  esteja  reprovado  por  nota  em  alguma  unidade curricular, tendo frequência igual ou superior a 75% (setenta e cinco por cento), poderá requerer, uma única vez, a aplicação do Exame Especial de Dependência, a ser aplicado em período letivo subsequente ao da unidade curricular cursada, na qual obteve reprovação por nota. (Incluído pela RESOLUÇÃO AD REFERENDUM COSUP/IFMS Nº 39, DE 24 DE OUTUBRO DE 2024)
 
@@ -24,7 +24,7 @@ o estudante poderá requerer o Exame Especial de Dependência mais de uma vez ou
 
 - § 5º  Em caráter de excepcionalidade, visando a possibilitar a conclusão do curso em tempo previsto no PPC, o estudante poderá requerer o Exame Especial de Dependência mais de uma vez ou em semestre posterior ao subsequente da unidade curricular cursada e que obteve reprovação por nota, desde que seja analisado e deferido pelo Colegiado de Curso. (Incluído pela RESOLUÇÃO AD REFERENDUM COSUP/IFMS Nº 39, DE 24 DE OUTUBRO DE 2024)
 
-## LEIA-SE:
+## LEIA-SE
 
 - Art.  45-A.    O  estudante  matriculado  em  curso  técnico  integrado,  incluindo  os  cursos  da  modalidade  da Educação de Jovens e Adultos e em curso técnico subsequente, que esteja reprovado por nota em alguma unidade curricular, tendo frequência igual ou superior a 75% (setenta e cinco por cento) poderá requerer, uma única  vez,  a  aplicação  do  Exame  Especial  de  Dependência  em  período  letivo  subsequente  ao  da  unidade curricular cursada, na qual obteve reprovação por nota.
 - §  1º    O  requerimento  para  realização  do  Exame  Especial  de  Dependência  deverá  ser  protocolado  pelo estudante  na  Central  de  Relacionamento  do campus ,  presencialmente  ou  on-line,  em  período  previsto  em calendário acadêmico. O professor da disciplina (preferencialmente o docente da disciplina que o estudante reprovou) elaborará, aplicará a avaliação e realizará a correção.
