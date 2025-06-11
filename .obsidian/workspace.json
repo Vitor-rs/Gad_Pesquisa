@@ -1,0 +1,284 @@
+{
+  "main": {
+    "id": "adac90b5eea8c0bc",
+    "type": "split",
+    "children": [
+      {
+        "id": "57cf61e519892d07",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "562b30ad5016dcbe",
+            "type": "leaf",
+            "state": {
+              "type": "empty",
+              "state": {},
+              "icon": "lucide-file",
+              "title": "Nova aba"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "33d0f00cc6aa57f0",
+    "type": "split",
+    "children": [
+      {
+        "id": "ccf9001530e04fdd",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "fb3ece8c314e28bb",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Explorador de arquivos"
+            }
+          },
+          {
+            "id": "274304a3a1e51662",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Procurar"
+            }
+          },
+          {
+            "id": "efc916ae4ffdcf4b",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Marcadores"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 454.5
+  },
+  "right": {
+    "id": "bea8dedee758440e",
+    "type": "split",
+    "children": [
+      {
+        "id": "fa8caeda91d0c0e0",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "bebc73239666fe69",
+            "type": "leaf",
+            "state": {
+              "type": "copilot-chat-view",
+              "state": {},
+              "icon": "lucide-file",
+              "title": "Plugin desativado"
+            }
+          },
+          {
+            "id": "39bae2ebfeaee2e8",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Docs_Dados/(TOOL) Connection circles.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Links inversos para (TOOL) Connection circles"
+            }
+          },
+          {
+            "id": "29e04dd331c3e3a8",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Links de saída"
+            }
+          },
+          {
+            "id": "db7b484cc9edc791",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": false
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "6e9e5e60e645ed0d",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {},
+              "icon": "lucide-list",
+              "title": "Sumário"
+            }
+          },
+          {
+            "id": "4612620c30a328f2",
+            "type": "leaf",
+            "state": {
+              "type": "mathpad-view",
+              "state": {},
+              "icon": "sigma",
+              "title": "Mathpad"
+            }
+          },
+          {
+            "id": "f252d49773ad1944",
+            "type": "leaf",
+            "state": {
+              "type": "smart-connections-view",
+              "state": {},
+              "icon": "smart-connections",
+              "title": "Smart Connections"
+            }
+          },
+          {
+            "id": "cc15da202b6fecc6",
+            "type": "leaf",
+            "state": {
+              "type": "mathpad-view",
+              "state": {},
+              "icon": "sigma",
+              "title": "Mathpad"
+            }
+          },
+          {
+            "id": "65fe265743d4ca5e",
+            "type": "leaf",
+            "state": {
+              "type": "github-copilot-chat-view",
+              "state": {},
+              "icon": "bot-message-square",
+              "title": "Copilot Chat"
+            }
+          }
+        ],
+        "currentTab": 5
+      }
+    ],
+    "direction": "horizontal",
+    "width": 427.5
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Abrir a troca rápida": false,
+      "graph:Abrir visualização em gráfico": false,
+      "canvas:Criar novo canvas": false,
+      "daily-notes:Abrir a nota de hoje": false,
+      "templates:Inserir modelo": false,
+      "command-palette:Abrir paleta de comandos": false,
+      "table-editor-obsidian:Advanced Tables Toolbar": false,
+      "mathpad:Open Mathpad": false,
+      "notion-like-tables:Create loom": false,
+      "markdown-table-editor:Open Markdown Table Editor": false,
+      "obsidian-import-json:JSON/CSV Importer": false,
+      "obsidian-extract-pdf-highlights:PDF Highlights": false,
+      "obsidian-book-search-plugin:Create new book note": false,
+      "media-extended:Open media": false,
+      "obsidian-importer:Open Importer": false,
+      "webpage-html-export:Export Vault to HTML": false,
+      "obsidian-to-notion:Share to notion": false,
+      "templater-obsidian:Templater": false,
+      "header-enhancer:Header Enhancer": false,
+      "pdf-plus:PDF++: Toggle auto-copy": false,
+      "pdf-plus:PDF++: Toggle auto-focus": false,
+      "pdf-plus:PDF++: Toggle auto-paste": false,
+      "copilot:Open Copilot Chat": false,
+      "smart-connections:Open: View Smart Connections": false,
+      "open-vscode:VSCode": false,
+      "smart-connections:Open: Smart Chat": false
+    }
+  },
+  "active": "562b30ad5016dcbe",
+  "lastOpenFiles": [
+    "Templates/template.md",
+    "Docs_Dados/conteudo_extraido.md",
+    "Docs_Dados/Aprenda Inglês 9x Mais Rápido com 40 Contos CRIATIVOS (Áudio nativo grátis + glossário embutido) Aumentar seu vocabulário,... (Edward W. Cooper) (Z-Library)_enhanced.md",
+    "Docs_Dados/seu_arquivo_formatado.md",
+    "Docs_Dados/(TOOL) Decision matrix.md",
+    "Docs_Dados/(TOOL) Iceberg Model.md",
+    "Docs_Dados/(TOOL) Connection circles.md",
+    "Templates/Sem título.md",
+    "Chats/New Chat.md",
+    "Templates",
+    "Docs_Dados/(TOOL) Hard choice model.md",
+    "Docs_Dados/teste.md",
+    "smart-templates/default/tags.md",
+    "smart-templates/default/overview.md",
+    "Docs_Dados/Building a Second Brain - The Definitive Introductory Guide (CODE and PARA Method).md",
+    "smart-templates/var_prompts.json",
+    "smart-templates/default",
+    "smart-templates",
+    "Chats",
+    "Docs_Dados/Data Analysis 2 - Data Visualisation (Computerphile).md",
+    "Docs_Dados/Data Analysis 4 - Data Transformation (Computerphile).md",
+    "Docs_Dados/The Trouble with Missing Data (Extra) (Computerphile).md",
+    "Docs_Dados/Using Bayesian Approaches & Sausage Plots to Improve Machine Learning (Extra) (Computerphile)).md",
+    "Docs_Dados/_pdfs/_pdfs.md",
+    "Vault.md",
+    "Tags/Tags.md",
+    "Docs_Dados/Docs_Dados.md",
+    "Docs_Dados/Método Cornell - aprenda como utilizar nos seus estudos.md",
+    "Docs_Dados/Progressive Summarization - A Practical Technique for Designing Discoverable Notes.md",
+    "Docs_Dados/_pdfs/Data Analysis 0 - Introduction to Data Analysis (Computerphile).pdf",
+    "Docs_Dados/Data Analysis 1 - What is Data (Computerphile).md",
+    "Docs_Dados/Foundations of Data Visualisation (Extra) (Computerphile).md",
+    "Docs_Dados/_pdfs/Progressive Summarization - A Practical Technique for Designing Discoverable Notes.pdf",
+    "Docs_Dados/_pdfs/Método Cornell - aprenda como utilizar nos seus estudos.pdf",
+    "Docs_Dados/_pdfs/Cornell Note Taking — The Best Way To Take Notes, Explained.pdf",
+    "Docs_Dados/_pdfs/Building a Second Brain - The Definitive Introductory Guide (CODE and PARA Method).pdf",
+    "Sem título.canvas",
+    "IFMS_TADS/Disciplinas_pendentes/Desenvolvimento_Frontend_para_Web/aula_07-11-2024/start-project/img/ducati.jpg",
+    "IFMS_TADS/Disciplinas_pendentes/Desenvolvimento_Frontend_para_Web/aula_07-11-2024/start-project/img/bmw.jpg",
+    "IFMS_TADS/Disciplinas_pendentes/Desenvolvimento_Frontend_para_Web/aula_07-11-2024/start-project/bmw.jpg",
+    "IFMS_TADS/Disciplinas_pendentes/Desenvolvimento_Frontend_para_Web/aula_07-11-2024/start-project/ducati.jpg",
+    "IFMS_TADS/Disciplinas_pendentes/Desenvolvimento_Frontend_para_Web/aula_07-11-2024/erro-404/img/ducati.jpg",
+    "IFMS_TADS/Disciplinas_pendentes/Desenvolvimento_Frontend_para_Web/aula_07-11-2024/erro-404/img/bmw.jpg",
+    "IFMS_TADS/Disciplinas_pendentes/Desenvolvimento_Frontend_para_Web/aula_07-11-2024/erro-404/img/pexels-ashwin-tambatkar-288923201-14690346.jpg",
+    "IFMS_TADS/Disciplinas_pendentes/Desenvolvimento_Frontend_para_Web/aula_07-11-2024/erro-404/img/pexels-stephanlouis-11026293.jpg",
+    "Administracao_e_Estrutura_Organizacional/Anotações/Untitled.canvas",
+    "Auditoria_e_Seguranca_de_Sistemas/Atividade/image.png",
+    "Auditoria_e_Seguranca_de_Sistemas/Atividade/N2 - Atividade 2.2 XSS (Mutillidae - Set Background Color) pt2.png",
+    "Books/Library.canvas",
+    "Sem título 2.canvas",
+    "Sem título 1.canvas",
+    "Pasta teste/Mapa de teste.canvas"
+  ]
+}

@@ -1,0 +1,249 @@
+{
+  "main": {
+    "id": "adac90b5eea8c0bc",
+    "type": "split",
+    "children": [
+      {
+        "id": "895623a8dee626de",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "adb02bcb995bbd41",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Ws/W4/Lesson 100 Notes.md",
+                "mode": "source",
+                "backlinks": false,
+                "source": false
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "33d0f00cc6aa57f0",
+    "type": "split",
+    "children": [
+      {
+        "id": "ccf9001530e04fdd",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "fb3ece8c314e28bb",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical"
+              }
+            }
+          },
+          {
+            "id": "274304a3a1e51662",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              }
+            }
+          },
+          {
+            "id": "efc916ae4ffdcf4b",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {}
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 332.5
+  },
+  "right": {
+    "id": "bea8dedee758440e",
+    "type": "split",
+    "children": [
+      {
+        "id": "fa8caeda91d0c0e0",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "39bae2ebfeaee2e8",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Ws/W4/Lesson 100 Notes.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              }
+            }
+          },
+          {
+            "id": "29e04dd331c3e3a8",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Ws/W4/Lesson 100 Notes.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              }
+            }
+          },
+          {
+            "id": "db7b484cc9edc791",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": false
+              }
+            }
+          },
+          {
+            "id": "6e9e5e60e645ed0d",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Ws/W4/Lesson 100 Notes.md"
+              }
+            }
+          },
+          {
+            "id": "4612620c30a328f2",
+            "type": "leaf",
+            "state": {
+              "type": "mathpad-view",
+              "state": {}
+            }
+          },
+          {
+            "id": "b0a50b1fd4eba5f4",
+            "type": "leaf",
+            "state": {
+              "type": "advanced-tables-toolbar",
+              "state": {}
+            }
+          },
+          {
+            "id": "fcfb0c402317a909",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              }
+            }
+          },
+          {
+            "id": "09915218df9ea1bc",
+            "type": "leaf",
+            "state": {
+              "type": "calendar",
+              "state": {}
+            }
+          }
+        ],
+        "currentTab": 4
+      }
+    ],
+    "direction": "horizontal",
+    "width": 471.5
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "media-extended:Open media": false,
+      "obsidian-extract-pdf-highlights:PDF Highlights": false,
+      "obsidian-book-search-plugin:Create new book note": false,
+      "obsidian-kindle-plugin:Sync your Kindle highlights": false,
+      "obsidian-importer:Open Importer": false,
+      "obsidian-to-notion:Share to notion": false,
+      "command-palette:Abrir paleta de comandos": false,
+      "switcher:Abrir a troca rápida": false,
+      "graph:Abrir visualização em gráfico": false,
+      "canvas:Criar novo canvas": false,
+      "daily-notes:Abrir a nota de hoje": false,
+      "templates:Inserir modelo": false,
+      "workspaces:Gerenciar leiautes da área de trabalho": false,
+      "markdown-importer:Abrir importador Markdown": false,
+      "table-editor-obsidian:Advanced Tables Toolbar": false,
+      "mathpad:Open Mathpad": false,
+      "notion-like-tables:Create loom": false,
+      "markdown-table-editor:Open Markdown Table Editor": false,
+      "obsidian-import-json:JSON/CSV Importer": false,
+      "open-vscode:VSCode": false,
+      "gemini-assistant:New Gemini chat": false
+    }
+  },
+  "active": "adb02bcb995bbd41",
+  "lastOpenFiles": [
+    "Ws/W4/Lesson 98 Notes.md",
+    "Ws/W4/Lesson 100 Notes.md",
+    "Ws/W4/Lesson 97 Notes.md",
+    "Ws/W2/W2 Notes.md",
+    "Projects/Essay.md",
+    "Sem título.canvas",
+    "Templates/Zotero Integation.md",
+    "Ws/Business Empire 2/Business Empire 2 Notes.md",
+    "Templates",
+    "Fontes/Fonte",
+    "Fontes",
+    "Projects",
+    "Ws/W4/Lesson 98 Notes-VitorPC.md",
+    "Ws/W4/W4 Notes.md",
+    "Ws/W2 Notes.md",
+    "Ws/Business Empire 2/Sem título",
+    "Ws/W2",
+    "Ws/Business Empire 2",
+    "Ws",
+    "Modelo_Revisão_Sistemática_IFMS.pdf",
+    "14/01/2024.md",
+    "14/01",
+    "Revisão Sistemática.md",
+    "Compreendendo os estudos de revisão sistemática (resumo).md",
+    "Pra notion.md",
+    "plantuml.md",
+    "Fleeting Notes/Google Charts.md",
+    "Templates/Map of Content.md",
+    "Templates/Note Template.md",
+    "kindle/Boothman-Tolezano-Como fazer alguém gostar de você em 90 segundos.md",
+    "Recipes.md",
+    "Pesquisa_Evasao/Recursos/Diversos/credenciais.md",
+    "19/12/2023.md",
+    "Excalidraw/Sem título.md",
+    "Excalidraw/Untitled Diagram.svg",
+    "Tema.md",
+    "Books/Python para análise de dados.md",
+    "Books/To Be Read.md",
+    "Books/Library.canvas",
+    "Untitled Diagram 1.svg",
+    "Untitled Diagram.svg",
+    "Sem título 2.canvas",
+    "Sem título 1.canvas",
+    "FleetingNotesApp/Untitled Diagram.svg",
+    "Pasta teste/Mapa de teste.canvas"
+  ]
+}

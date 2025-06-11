@@ -1,0 +1,13 @@
+{
+  "accentColor": "",
+  "cssTheme": "Behave dark",
+  "showViewHeader": true,
+  "nativeMenus": false,
+  "translucency": false,
+  "enabledCssSnippets": [
+    "custom-admonitions.be87c4"
+  ],
+  "theme": "obsidian",
+  "baseFontSize": 15,
+  "showRibbon": true
+}

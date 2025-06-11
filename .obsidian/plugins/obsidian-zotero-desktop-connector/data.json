@@ -1,0 +1,35 @@
+{
+  "database": "Zotero",
+  "noteImportFolder": "Base_fontes",
+  "pdfExportImageDPI": 120,
+  "pdfExportImageFormat": "png",
+  "pdfExportImageQuality": 90,
+  "citeFormats": [
+    {
+      "name": "ABNT",
+      "format": "formatted-citation",
+      "cslStyle": "associacao-brasileira-de-normas-tecnicas"
+    }
+  ],
+  "exportFormats": [
+    {
+      "name": "Vitor import",
+      "outputPathTemplate": "Base_fontes/notas/{{citekey}}.md",
+      "imageOutputPathTemplate": "Base_fontes/notas/imagens/{{citekey}}/",
+      "imageBaseNameTemplate": "imagem",
+      "cslStyle": "associacao-brasileira-de-normas-tecnicas"
+    },
+    {
+      "name": "nota_importada",
+      "outputPathTemplate": "Base_fontes/notas/fontes/@{{citekey}}.md",
+      "imageOutputPathTemplate": "Base_fontes/notas/fontes/images/{{citekey}}/",
+      "imageBaseNameTemplate": "imagem",
+      "templatePath": "Zotero/Zotero Template.md",
+      "cslStyle": "associacao-brasileira-de-normas-tecnicas"
+    }
+  ],
+  "citeSuggestTemplate": "[[{{citekey}}]]",
+  "openNoteAfterImport": true,
+  "whichNotesToOpenAfterImport": "first-imported-note",
+  "pdfExportImageOCR": true
+}

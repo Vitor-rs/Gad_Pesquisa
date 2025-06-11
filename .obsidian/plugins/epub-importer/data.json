@@ -1,0 +1,14 @@
+{
+  "tag": "livro",
+  "libraries": [],
+  "savePath": "",
+  "assetsPath": "{{savePath}}/{{bookName}}/images",
+  "serialNumber": true,
+  "serialNumberDelta": 0,
+  "propertysTemplate": "Título: {{bookName}}\nAutor: {{author}}\nEditora: {{publisher}}\nStatus: false",
+  "granularity": 4,
+  "imageFormat": "![](imagePath)",
+  "autoOpenRightPanel": false,
+  "allbooks": false,
+  "removeDuplicateFolders": false
+}

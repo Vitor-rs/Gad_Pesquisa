@@ -1,0 +1,29 @@
+{
+  "conversations": [
+    {
+      "id": "1749318322472",
+      "title": "Olá",
+      "messages": [
+        {
+          "id": "1749318322472",
+          "content": "Olá",
+          "role": "user",
+          "timestamp": 1749318322472
+        },
+        {
+          "id": "msg_vrtx_011RfWbeu29KPU1B5ASeZizH",
+          "content": "Olá! Como posso ajudá-lo com suas tarefas no Obsidian hoje? \n\nPosso auxiliar com:\n- Organização de notas e estrutura do vault\n- Criação de templates\n- Uso de tags e links\n- Configuração de plugins\n- Formatação em Markdown\n- Criação de gráficos e visualizações\n- Automação de fluxos de trabalho\n\nO que você gostaria de fazer ou melhorar em seu Obsidian?",
+          "role": "assistant",
+          "timestamp": 1749318325507
+        }
+      ],
+      "createdAt": 1749318322472,
+      "updatedAt": 1749318325507,
+      "model": {
+        "label": "Claude Sonnet 4",
+        "value": "claude-sonnet-4"
+      }
+    }
+  ],
+  "activeConversationId": "1749318322472"
+}

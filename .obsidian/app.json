@@ -1,0 +1,22 @@
+{
+  "showFrontmatter": true,
+  "showLineNumber": true,
+  "spellcheck": false,
+  "showInlineTitle": false,
+  "pdfExportSettings": {
+    "includeName": false,
+    "pageSize": "A4",
+    "landscape": false,
+    "margin": "2",
+    "downscalePercent": 84
+  },
+  "strictLineBreaks": false,
+  "rightToLeft": false,
+  "alwaysUpdateLinks": true,
+  "newFileLocation": "current",
+  "foldIndent": false,
+  "foldHeading": false,
+  "spellcheckLanguages": null,
+  "showUnsupportedFiles": true,
+  "promptDelete": false
+}

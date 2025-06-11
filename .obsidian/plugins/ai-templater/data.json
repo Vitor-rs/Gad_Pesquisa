@@ -1,0 +1,11 @@
+{
+  "defaultEndpoint": "",
+  "defaultModel": "Gemini",
+  "defaultApiKey": "AIzaSyA--BAaZO6VCA8oo0RnRlDXbnA6yxbifvw",
+  "defaultMaxOutgoingCharacters": 4096,
+  "defaultMaxNumTokens": 1024,
+  "debugToConsole": false,
+  "displayTokenUsageDesktop": true,
+  "displayTokenUsageMobile": false,
+  "defaultSystemMessage": "Você é um assistente útil..."
+}

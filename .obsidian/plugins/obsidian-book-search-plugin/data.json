@@ -1,0 +1,13 @@
+{
+  "folder": "Books",
+  "fileNameFormat": "{{title}}",
+  "frontmatter": "Subtitle: {{subtitle}}\nauthors: {{authors}}\ncategory: {{category}}\npublisher: {{publisher}}\ntotalPage: {{totalPage}}\ncoverSmallUrl: {{coverSmallUrl}}\npublishDate: {{publishDate}}",
+  "content": "",
+  "useDefaultFrontmatter": false,
+  "defaultFrontmatterKeyType": "Camel Case",
+  "templateFile": "",
+  "serviceProvider": "google",
+  "naverClientId": "",
+  "naverClientSecret": "",
+  "localePreference": "default"
+}
