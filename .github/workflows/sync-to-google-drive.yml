@@ -1,4 +1,4 @@
-name: Sync Repository to Google Drive with Pre-checks
+name: Sync Repository to Google Drive
 
 on:
   push:
@@ -119,86 +119,28 @@ jobs:
             raise
         EOF
         
-    - name: Create Repository Archive
+    - name: Sync Repository to Google Drive Folder
       run: |
         python << EOF
         import os
-        import zipfile
+        import shutil
         from datetime import datetime
         from pathlib import Path
-        
-        # Informações do repositório
-        repo_name = '${{ github.event.repository.name }}'
-        branch = '${{ github.ref_name }}'
-        commit_sha = '${{ github.sha }}'
-        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-        
-        zip_name = f'{repo_name}-{branch}-{timestamp}.zip'
-        
-        print(f"📦 Criando arquivo: {zip_name}")
-        print(f"🔀 Branch: {branch}")
-        print(f"📝 Commit: {commit_sha[:8]}")
-        print(f"⏰ Timestamp: {timestamp}")
-        
-        # Contar arquivos antes de compactar
-        file_count = 0
-        excluded_count = 0
-        
-        with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk('.'):
-                # Excluir pastas desnecessárias (similar ao seu código)
-                dirs[:] = [d for d in dirs if d not in ['.git', '__pycache__', 'node_modules', '.github']]
-                
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    
-                    # Excluir arquivos desnecessários
-                    if (not file.endswith(('.zip', '.pyc')) and 
-                        file != 'credentials.json' and
-                        not file.startswith('.')):
-                        
-                        zipf.write(file_path, file_path)
-                        file_count += 1
-                    else:
-                        excluded_count += 1
-        
-        # Verificar tamanho do arquivo
-        zip_size = os.path.getsize(zip_name)
-        print(f"📊 Arquivos incluídos: {file_count}")
-        print(f"🚫 Arquivos excluídos: {excluded_count}")
-        print(f"📏 Tamanho do arquivo: {zip_size:,} bytes ({zip_size/1024/1024:.2f} MB)")
-        
-        # Salvar informações para próximo step
-        with open('sync_info.txt', 'w') as f:
-            f.write(f"ZIP_NAME={zip_name}\n")
-            f.write(f"FILE_COUNT={file_count}\n")
-            f.write(f"ZIP_SIZE={zip_size}\n")
-        
-        print(f"✅ Arquivo criado com sucesso: {zip_name}")
-        EOF
-        
-    - name: Upload to Google Drive
-      run: |
-        python << EOF
-        import os
-        from datetime import datetime
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaFileUpload
+        import io
         
-        # Ler informações do step anterior
-        sync_info = {}
-        with open('sync_info.txt', 'r') as f:
-            for line in f:
-                key, value = line.strip().split('=', 1)
-                sync_info[key] = value
+        # Configurações
+        repo_name = '${{ github.event.repository.name }}'
+        branch = '${{ github.ref_name }}'
+        commit_sha = '${{ github.sha }}'
+        parent_folder_id = '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'
         
-        zip_name = sync_info['ZIP_NAME']
-        file_count = sync_info['FILE_COUNT']
-        zip_size = int(sync_info['ZIP_SIZE'])
-        
-        print(f"⬆️  Iniciando upload: {zip_name}")
-        print(f"📊 Contém {file_count} arquivos ({zip_size/1024/1024:.2f} MB)")
+        print(f"🔄 Sincronizando repositório como pasta no Google Drive...")
+        print(f"📍 Repositório: {repo_name}")
+        print(f"🔀 Branch: {branch}")
+        print(f"📝 Commit: {commit_sha[:8]}")
         
         # Configurar Google Drive
         credentials = service_account.Credentials.from_service_account_file(
@@ -208,34 +150,169 @@ jobs:
         
         service = build('drive', 'v3', credentials=credentials)
         
-        # Metadados do arquivo
-        file_metadata = {
-            'name': zip_name,
-            'parents': ['${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'],
-            'description': f'Backup automático via GitHub Actions - Commit: ${{ github.sha }}'
-        }
+        # Verificar se a pasta do repositório já existe
+        query = f"name = '{repo_name}' and '{parent_folder_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         
-        # Upload com barra de progresso simulada
-        print("📤 Fazendo upload...")
-        media = MediaFileUpload(zip_name, resumable=True)
+        results = service.files().list(
+            q=query,
+            fields='files(id,name)',
+            spaces='drive'
+        ).execute()
         
-        request = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id,name,size,createdTime'
-        )
+        existing_folders = results.get('files', [])
         
-        file = request.execute()
+        if existing_folders:
+            # Pasta existe - vamos limpar e atualizar
+            repo_folder_id = existing_folders[0]['id']
+            print(f"📁 Pasta encontrada: {repo_name} (ID: {repo_folder_id})")
+            
+            # Listar e deletar todos os arquivos dentro da pasta
+            print("🧹 Limpando pasta existente...")
+            
+            # Buscar todos os arquivos e subpastas
+            query = f"'{repo_folder_id}' in parents and trashed = false"
+            files_to_delete = []
+            page_token = None
+            
+            while True:
+                results = service.files().list(
+                    q=query,
+                    fields='nextPageToken, files(id,name)',
+                    pageToken=page_token
+                ).execute()
+                
+                files_to_delete.extend(results.get('files', []))
+                page_token = results.get('nextPageToken')
+                
+                if not page_token:
+                    break
+            
+            # Deletar arquivos encontrados
+            for file in files_to_delete:
+                try:
+                    service.files().delete(fileId=file['id']).execute()
+                except Exception as e:
+                    print(f"  ⚠️  Erro ao remover {file['name']}: {e}")
+            
+            print(f"  ✅ {len(files_to_delete)} arquivo(s) removido(s)")
+            
+        else:
+            # Criar nova pasta
+            print(f"📁 Criando nova pasta: {repo_name}")
+            
+            folder_metadata = {
+                'name': repo_name,
+                'mimeType': 'application/vnd.google-apps.folder',
+                'parents': [parent_folder_id]
+            }
+            
+            folder = service.files().create(
+                body=folder_metadata,
+                fields='id'
+            ).execute()
+            
+            repo_folder_id = folder.get('id')
+            print(f"✅ Pasta criada com ID: {repo_folder_id}")
         
-        # Informações de sucesso
-        print(f"\n🎉 Upload concluído com sucesso!")
-        print(f"📁 Nome: {file.get('name')}")
-        print(f"🆔 ID no Drive: {file.get('id')}")
-        print(f"📊 Tamanho: {file.get('size')} bytes")
-        print(f"⏰ Criado em: {file.get('createdTime')}")
-        print(f"🔗 Repositório: ${{ github.event.repository.name }}")
-        print(f"🌿 Branch: ${{ github.ref_name }}")
-        print(f"👤 Autor: ${{ github.actor }}")
+        # Função para fazer upload recursivo de arquivos
+        def upload_directory(local_path, parent_id, path_prefix=""):
+            """Upload recursivo de diretório para Google Drive"""
+            
+            uploaded_count = 0
+            
+            for item in os.listdir(local_path):
+                item_path = os.path.join(local_path, item)
+                
+                # Pular diretórios e arquivos indesejados
+                if item in ['.git', '__pycache__', 'node_modules', '.github', 'credentials.json']:
+                    continue
+                
+                # Pular arquivos ocultos (exceto .gitignore)
+                if item.startswith('.') and item != '.gitignore':
+                    continue
+                
+                if os.path.isfile(item_path):
+                    # Pular arquivos temporários e compilados
+                    if item_path.endswith(('.pyc', '.pyo', '.pyd', '__pycache__', '.DS_Store')):
+                        continue
+                    
+                    try:
+                        file_metadata = {
+                            'name': item,
+                            'parents': [parent_id]
+                        }
+                        
+                        # Determinar MIME type
+                        mime_type = 'application/octet-stream'
+                        if item.endswith('.txt'):
+                            mime_type = 'text/plain'
+                        elif item.endswith('.py'):
+                            mime_type = 'text/x-python'
+                        elif item.endswith('.md'):
+                            mime_type = 'text/markdown'
+                        elif item.endswith('.json'):
+                            mime_type = 'application/json'
+                        elif item.endswith(('.yml', '.yaml')):
+                            mime_type = 'text/yaml'
+                        elif item.endswith(('.jpg', '.jpeg')):
+                            mime_type = 'image/jpeg'
+                        elif item.endswith('.png'):
+                            mime_type = 'image/png'
+                        elif item.endswith('.pdf'):
+                            mime_type = 'application/pdf'
+                        
+                        media = MediaFileUpload(
+                            item_path,
+                            mimetype=mime_type,
+                            resumable=True
+                        )
+                        
+                        file = service.files().create(
+                            body=file_metadata,
+                            media_body=media,
+                            fields='id,name'
+                        ).execute()
+                        
+                        uploaded_count += 1
+                        
+                    except Exception as e:
+                        print(f"  ❌ Erro ao fazer upload de {item}: {str(e)[:50]}...")
+                
+                elif os.path.isdir(item_path):
+                    # Criar subpasta e fazer upload recursivo
+                    try:
+                        # Criar subpasta no Drive
+                        subfolder_metadata = {
+                            'name': item,
+                            'mimeType': 'application/vnd.google-apps.folder',
+                            'parents': [parent_id]
+                        }
+                        
+                        subfolder = service.files().create(
+                            body=subfolder_metadata,
+                            fields='id'
+                        ).execute()
+                        
+                        subfolder_id = subfolder.get('id')
+                        
+                        # Upload recursivo do conteúdo
+                        sub_count = upload_directory(item_path, subfolder_id, 
+                                                   os.path.join(path_prefix, item) if path_prefix else item)
+                        uploaded_count += sub_count
+                        
+                    except Exception as e:
+                        print(f"  ❌ Erro ao criar pasta {item}: {str(e)[:50]}...")
+            
+            return uploaded_count
+        
+        # Fazer upload de todos os arquivos
+        print("\n📤 Fazendo upload dos arquivos...")
+        total_uploaded = upload_directory('.', repo_folder_id)
+        
+        print(f"\n✅ Total de arquivos enviados: {total_uploaded}")
+        print(f"\n🎉 Sincronização concluída com sucesso!")
+        print(f"📁 Pasta no Drive: {repo_name}")
+        print(f"🔗 Localização: Sistema_GAD/Repositorios_Github_Gad/{repo_name}")
         EOF
         
     - name: Cleanup and Summary
@@ -246,14 +323,12 @@ jobs:
         
         print("\n🧹 Limpando arquivos temporários...")
         
-        # Remover arquivos temporários
-        temp_files = ['credentials.json', 'sync_info.txt']
-        for file in temp_files:
-            if os.path.exists(file):
-                os.remove(file)
-                print(f"🗑️  Removido: {file}")
+        # Remover apenas o arquivo de credenciais
+        if os.path.exists('credentials.json'):
+            os.remove('credentials.json')
+            print("🗑️  Removido: credentials.json")
         
-        # Variáveis do commit
+        # Resumo final
         commit_sha = '${{ github.sha }}'
         commit_short = commit_sha[:8] if len(commit_sha) > 8 else commit_sha
         
@@ -265,55 +340,7 @@ jobs:
         print(f"🌿 Branch: ${{ github.ref_name }}")
         print(f"📝 Commit: {commit_short}")
         print(f"👤 Autor: ${{ github.actor }}")
-        print(f"🎯 Destino: Google Drive/Sistema_GAD/Repositorios_Github_Gad")
+        print(f"📁 Sincronizado em: Sistema_GAD/Repositorios_Github_Gad/${{ github.event.repository.name }}")
         print("=" * 50)
         print("🎉 Sincronização automática concluída!")
-        EOF
-        
-    - name: Cleanup Old Backups (Optional)
-      if: github.event_name == 'push'
-      run: |
-        python << EOF
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-        from datetime import datetime, timedelta
-        
-        print("🧹 Verificando backups antigos...")
-        
-        credentials = service_account.Credentials.from_service_account_file(
-            'credentials.json',
-            scopes=['https://www.googleapis.com/auth/drive']
-        )
-        
-        service = build('drive', 'v3', credentials=credentials)
-        
-        try:
-            # Buscar arquivos da pasta que são do repositório atual
-            query = f"'${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}' in parents and name contains '${{ github.event.repository.name }}-'"
-            
-            results = service.files().list(
-                q=query,
-                orderBy='createdTime desc',
-                fields='files(id,name,createdTime)'
-            ).execute()
-            
-            files = results.get('files', [])
-            print(f"📊 Total de backups encontrados: {len(files)}")
-            
-            # Manter apenas os 15 backups mais recentes
-            if len(files) > 15:
-                files_to_delete = files[15:]
-                print(f"🗑️  Removendo {len(files_to_delete)} backup(s) antigo(s)...")
-                
-                for old_file in files_to_delete:
-                    service.files().delete(fileId=old_file['id']).execute()
-                    print(f"  ✅ Removido: {old_file['name']}")
-                
-                print(f"✅ Limpeza concluída. Mantidos os 15 backups mais recentes.")
-            else:
-                print("ℹ️  Nenhum backup antigo para remover.")
-                
-        except Exception as e:
-            print(f"⚠️  Aviso: Não foi possível limpar backups antigos: {e}")
-            print("💡 Isso não afeta a sincronização principal.")
         EOF
