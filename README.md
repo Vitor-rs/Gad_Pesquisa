@@ -1,4 +1,4 @@
-# Sistema GAD - Gerenciamento Automático de Documentos/Certificados
+# Sistema GAD - Gerenciamento de Atividades Diversificadas
 
 ## Sobre o Projeto
 
