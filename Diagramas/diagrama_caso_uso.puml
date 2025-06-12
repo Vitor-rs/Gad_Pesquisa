@@ -1,0 +1,103 @@
+@startuml Diagrama de Caso de Uso - Sistema GAD
+
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+skinparam usecaseBorderColor #000000
+skinparam usecaseBackgroundColor #EEEBDC
+skinparam usecaseFontName Arial
+skinparam usecaseFontSize 14
+skinparam actorFontSize 14
+skinparam arrowColor #000000
+skinparam ActorBorderColor #000000
+skinparam ActorBackgroundColor #EEEBDC
+
+' Definição dos atores
+actor "Estudante" as Estudante
+actor "Avaliador" as Avaliador
+
+' Pacotes para organizar os casos de uso
+package "Gerenciamento de Usuários" {
+  usecase "Cadastrar no Sistema" as UC1
+  usecase "Autenticar no Sistema" as UC2
+  usecase "Gerenciar Perfil" as UC3
+}
+
+package "Gerenciamento de Certificados" {
+  usecase "Enviar Certificado" as UC4
+  usecase "Visualizar Certificados Enviados" as UC5
+  usecase "Extrair Texto de Certificado" as UC6
+  usecase "Classificar Certificado\nAutomaticamente" as UC7
+  usecase "Editar Informações do\nCertificado" as UC8
+  usecase "Excluir Certificado" as UC9
+}
+
+package "Validação de Atividades" {
+  usecase "Visualizar Certificados\nPendentes de Avaliação" as UC10
+  usecase "Aprovar/Rejeitar Certificado" as UC11
+  usecase "Ajustar Classificação\nde Certificado" as UC12
+  usecase "Ajustar Horas\nde Atividade" as UC13
+  usecase "Adicionar Observações" as UC14
+}
+
+package "Gestão de Regras" {
+  usecase "Configurar Categorias\nde Atividades" as UC15
+  usecase "Definir Limites de\nCarga Horária por Categoria" as UC16
+  usecase "Configurar Regras de\nRedistribuição de Horas" as UC17
+  usecase "Parametrizar Regras\npor Curso" as UC18
+}
+
+package "Relatórios e Monitoramento" {
+  usecase "Visualizar Progresso\nde Atividades" as UC19
+  usecase "Gerar Relatório de\nAtividades Complementares" as UC20
+  usecase "Monitorar Desempenho\ndo Sistema" as UC21
+  usecase "Visualizar Estatísticas\nde Certificados" as UC22
+}
+
+package "Inteligência Artificial" {
+  usecase "Treinar Modelo de\nClassificação" as UC23
+  usecase "Melhorar Precisão\nde OCR" as UC24
+  usecase "Revisar e Corrigir\nClassificações Automáticas" as UC25
+}
+
+' Relacionamentos para o Estudante
+Estudante --> UC1
+Estudante --> UC2
+Estudante --> UC3
+Estudante --> UC4
+Estudante --> UC5
+Estudante --> UC8 : apenas dados básicos
+Estudante --> UC9 : apenas certificados próprios
+Estudante --> UC19 : próprio progresso
+
+' Relacionamentos para o Avaliador
+Avaliador --> UC2
+Avaliador --> UC3
+Avaliador --> UC10
+Avaliador --> UC11
+Avaliador --> UC12
+Avaliador --> UC13
+Avaliador --> UC14
+Avaliador --> UC15
+Avaliador --> UC16
+Avaliador --> UC17
+Avaliador --> UC18
+Avaliador --> UC19
+Avaliador --> UC20
+Avaliador --> UC21
+Avaliador --> UC22
+Avaliador --> UC23
+Avaliador --> UC24
+Avaliador --> UC25
+
+' Relacionamentos de extensão e inclusão
+UC4 ..> UC6 : <<include>>
+UC6 ..> UC7 : <<include>>
+UC10 ..> UC11 : <<include>>
+UC11 ..> UC12 : <<extend>>
+UC11 ..> UC13 : <<extend>>
+UC11 ..> UC14 : <<extend>>
+UC20 ..> UC19 : <<include>>
+UC23 ..> UC25 : <<include>>
+UC7 ..> UC25 : <<extend>>
+
+@enduml
