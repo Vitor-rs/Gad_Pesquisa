@@ -253,13 +253,9 @@ jobs:
                 os.remove(file)
                 print(f"🗑️  Removido: {file}")
         
-        # Remover arquivo ZIP
-        sync_info = {}
-        if os.path.exists('sync_info.txt'):
-            with open('sync_info.txt', 'r') as f:
-                for line in f:
-                    key, value = line.strip().split('=', 1)
-                    sync_info[key] = value
+        # Variáveis do commit
+        commit_sha = '${{ github.sha }}'
+        commit_short = commit_sha[:8] if len(commit_sha) > 8 else commit_sha
         
         print("\n📋 RESUMO DA SINCRONIZAÇÃO")
         print("=" * 50)
@@ -267,7 +263,7 @@ jobs:
         print(f"⏰ Horário: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
         print(f"🏢 Repositório: ${{ github.event.repository.name }}")
         print(f"🌿 Branch: ${{ github.ref_name }}")
-        print(f"📝 Commit: ${{ github.sha }}".[:50] + "...")
+        print(f"📝 Commit: {commit_short}")
         print(f"👤 Autor: ${{ github.actor }}")
         print(f"🎯 Destino: Google Drive/Sistema_GAD/Repositorios_Github_Gad")
         print("=" * 50)
@@ -293,7 +289,7 @@ jobs:
         
         try:
             # Buscar arquivos da pasta que são do repositório atual
-            query = f"'{{\{{ secrets.GOOGLE_DRIVE_FOLDER_ID }}}}' in parents and name contains '${{ github.event.repository.name }}-'"
+            query = f"'${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}' in parents and name contains '${{ github.event.repository.name }}-'"
             
             results = service.files().list(
                 q=query,
