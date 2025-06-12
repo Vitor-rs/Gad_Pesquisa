@@ -1,0 +1,323 @@
+name: Sync Repository to Google Drive with Pre-checks
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  sync-to-drive:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install Dependencies
+      run: |
+        pip install google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
+        
+    - name: Pre-check Environment Variables
+      run: |
+        python << EOF
+        import os
+        import sys
+        
+        print("🔍 Verificando variáveis de ambiente...")
+        print("=" * 60)
+        
+        # Variáveis necessárias
+        required_vars = {
+            'GOOGLE_CREDENTIALS': '${{ secrets.GOOGLE_CREDENTIALS }}',
+            'GOOGLE_DRIVE_FOLDER_ID': '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'
+        }
+        
+        # Variáveis opcionais do repositório
+        repo_vars = {
+            'REPOSITORY_NAME': '${{ github.event.repository.name }}',
+            'BRANCH': '${{ github.ref_name }}',
+            'COMMIT_SHA': '${{ github.sha }}',
+            'ACTOR': '${{ github.actor }}'
+        }
+        
+        missing_vars = []
+        
+        # Verificar variáveis essenciais
+        for name, value in required_vars.items():
+            if value and value.strip():
+                if 'CREDENTIALS' in name:
+                    print(f"✅ {name}: {'*' * 8}")
+                else:
+                    print(f"✅ {name}: {value}")
+            else:
+                print(f"❌ {name}: NÃO ENCONTRADA")
+                missing_vars.append(name)
+        
+        # Mostrar variáveis do repositório
+        print("\n📋 Informações do repositório:")
+        for name, value in repo_vars.items():
+            print(f"ℹ️  {name}: {value}")
+        
+        # Verificar se temos o mínimo necessário
+        if missing_vars:
+            print(f"\n❌ ERRO: Variáveis essenciais não encontradas: {', '.join(missing_vars)}")
+            print("\nVerifique se você configurou os secrets no GitHub:")
+            print("- Vá em Settings → Secrets and variables → Actions")
+            print("- Configure GOOGLE_CREDENTIALS e GOOGLE_DRIVE_FOLDER_ID")
+            sys.exit(1)
+        
+        print("\n✅ Todas as variáveis necessárias foram encontradas!")
+        print("🚀 Prosseguindo com a sincronização...")
+        EOF
+        
+    - name: Setup Google Credentials
+      run: |
+        echo '${{ secrets.GOOGLE_CREDENTIALS }}' | base64 -d > credentials.json
+        echo "GOOGLE_APPLICATION_CREDENTIALS=credentials.json" >> $GITHUB_ENV
+        
+    - name: Validate Google Drive Connection
+      run: |
+        python << EOF
+        import os
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+        
+        print("🔗 Testando conexão com Google Drive...")
+        
+        try:
+            # Configurar credenciais
+            credentials = service_account.Credentials.from_service_account_file(
+                'credentials.json',
+                scopes=['https://www.googleapis.com/auth/drive']
+            )
+            
+            service = build('drive', 'v3', credentials=credentials)
+            
+            # Testar acesso à pasta de destino
+            folder_id = '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'
+            folder_info = service.files().get(fileId=folder_id).execute()
+            
+            print(f"✅ Conexão estabelecida com sucesso!")
+            print(f"📁 Pasta de destino: {folder_info.get('name')}")
+            print(f"🆔 ID da pasta: {folder_id}")
+            
+            # Verificar permissões
+            permissions = service.permissions().list(fileId=folder_id).execute()
+            print(f"🔐 Permissões configuradas: {len(permissions.get('permissions', []))} entrada(s)")
+            
+        except Exception as e:
+            print(f"❌ Erro ao conectar com Google Drive: {str(e)}")
+            print("\n💡 Possíveis causas:")
+            print("- Credenciais inválidas ou expiradas")
+            print("- Pasta não encontrada ou sem permissão")
+            print("- Google Drive API não habilitada")
+            raise
+        EOF
+        
+    - name: Create Repository Archive
+      run: |
+        python << EOF
+        import os
+        import zipfile
+        from datetime import datetime
+        from pathlib import Path
+        
+        # Informações do repositório
+        repo_name = '${{ github.event.repository.name }}'
+        branch = '${{ github.ref_name }}'
+        commit_sha = '${{ github.sha }}'
+        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        
+        zip_name = f'{repo_name}-{branch}-{timestamp}.zip'
+        
+        print(f"📦 Criando arquivo: {zip_name}")
+        print(f"🔀 Branch: {branch}")
+        print(f"📝 Commit: {commit_sha[:8]}")
+        print(f"⏰ Timestamp: {timestamp}")
+        
+        # Contar arquivos antes de compactar
+        file_count = 0
+        excluded_count = 0
+        
+        with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk('.'):
+                # Excluir pastas desnecessárias (similar ao seu código)
+                dirs[:] = [d for d in dirs if d not in ['.git', '__pycache__', 'node_modules', '.github']]
+                
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    
+                    # Excluir arquivos desnecessários
+                    if (not file.endswith(('.zip', '.pyc')) and 
+                        file != 'credentials.json' and
+                        not file.startswith('.')):
+                        
+                        zipf.write(file_path, file_path)
+                        file_count += 1
+                    else:
+                        excluded_count += 1
+        
+        # Verificar tamanho do arquivo
+        zip_size = os.path.getsize(zip_name)
+        print(f"📊 Arquivos incluídos: {file_count}")
+        print(f"🚫 Arquivos excluídos: {excluded_count}")
+        print(f"📏 Tamanho do arquivo: {zip_size:,} bytes ({zip_size/1024/1024:.2f} MB)")
+        
+        # Salvar informações para próximo step
+        with open('sync_info.txt', 'w') as f:
+            f.write(f"ZIP_NAME={zip_name}\n")
+            f.write(f"FILE_COUNT={file_count}\n")
+            f.write(f"ZIP_SIZE={zip_size}\n")
+        
+        print(f"✅ Arquivo criado com sucesso: {zip_name}")
+        EOF
+        
+    - name: Upload to Google Drive
+      run: |
+        python << EOF
+        import os
+        from datetime import datetime
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+        
+        # Ler informações do step anterior
+        sync_info = {}
+        with open('sync_info.txt', 'r') as f:
+            for line in f:
+                key, value = line.strip().split('=', 1)
+                sync_info[key] = value
+        
+        zip_name = sync_info['ZIP_NAME']
+        file_count = sync_info['FILE_COUNT']
+        zip_size = int(sync_info['ZIP_SIZE'])
+        
+        print(f"⬆️  Iniciando upload: {zip_name}")
+        print(f"📊 Contém {file_count} arquivos ({zip_size/1024/1024:.2f} MB)")
+        
+        # Configurar Google Drive
+        credentials = service_account.Credentials.from_service_account_file(
+            'credentials.json',
+            scopes=['https://www.googleapis.com/auth/drive']
+        )
+        
+        service = build('drive', 'v3', credentials=credentials)
+        
+        # Metadados do arquivo
+        file_metadata = {
+            'name': zip_name,
+            'parents': ['${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'],
+            'description': f'Backup automático via GitHub Actions - Commit: ${{ github.sha }}'
+        }
+        
+        # Upload com barra de progresso simulada
+        print("📤 Fazendo upload...")
+        media = MediaFileUpload(zip_name, resumable=True)
+        
+        request = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id,name,size,createdTime'
+        )
+        
+        file = request.execute()
+        
+        # Informações de sucesso
+        print(f"\n🎉 Upload concluído com sucesso!")
+        print(f"📁 Nome: {file.get('name')}")
+        print(f"🆔 ID no Drive: {file.get('id')}")
+        print(f"📊 Tamanho: {file.get('size')} bytes")
+        print(f"⏰ Criado em: {file.get('createdTime')}")
+        print(f"🔗 Repositório: ${{ github.event.repository.name }}")
+        print(f"🌿 Branch: ${{ github.ref_name }}")
+        print(f"👤 Autor: ${{ github.actor }}")
+        EOF
+        
+    - name: Cleanup and Summary
+      run: |
+        python << EOF
+        import os
+        from datetime import datetime
+        
+        print("\n🧹 Limpando arquivos temporários...")
+        
+        # Remover arquivos temporários
+        temp_files = ['credentials.json', 'sync_info.txt']
+        for file in temp_files:
+            if os.path.exists(file):
+                os.remove(file)
+                print(f"🗑️  Removido: {file}")
+        
+        # Remover arquivo ZIP
+        sync_info = {}
+        if os.path.exists('sync_info.txt'):
+            with open('sync_info.txt', 'r') as f:
+                for line in f:
+                    key, value = line.strip().split('=', 1)
+                    sync_info[key] = value
+        
+        print("\n📋 RESUMO DA SINCRONIZAÇÃO")
+        print("=" * 50)
+        print(f"✅ Status: Concluída com sucesso")
+        print(f"⏰ Horário: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        print(f"🏢 Repositório: ${{ github.event.repository.name }}")
+        print(f"🌿 Branch: ${{ github.ref_name }}")
+        print(f"📝 Commit: ${{ github.sha }}".[:50] + "...")
+        print(f"👤 Autor: ${{ github.actor }}")
+        print(f"🎯 Destino: Google Drive/Sistema_GAD/Repositorios_Github_Gad")
+        print("=" * 50)
+        print("🎉 Sincronização automática concluída!")
+        EOF
+        
+    - name: Cleanup Old Backups (Optional)
+      if: github.event_name == 'push'
+      run: |
+        python << EOF
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+        from datetime import datetime, timedelta
+        
+        print("🧹 Verificando backups antigos...")
+        
+        credentials = service_account.Credentials.from_service_account_file(
+            'credentials.json',
+            scopes=['https://www.googleapis.com/auth/drive']
+        )
+        
+        service = build('drive', 'v3', credentials=credentials)
+        
+        try:
+            # Buscar arquivos da pasta que são do repositório atual
+            query = f"'{{\{{ secrets.GOOGLE_DRIVE_FOLDER_ID }}}}' in parents and name contains '${{ github.event.repository.name }}-'"
+            
+            results = service.files().list(
+                q=query,
+                orderBy='createdTime desc',
+                fields='files(id,name,createdTime)'
+            ).execute()
+            
+            files = results.get('files', [])
+            print(f"📊 Total de backups encontrados: {len(files)}")
+            
+            # Manter apenas os 15 backups mais recentes
+            if len(files) > 15:
+                files_to_delete = files[15:]
+                print(f"🗑️  Removendo {len(files_to_delete)} backup(s) antigo(s)...")
+                
+                for old_file in files_to_delete:
+                    service.files().delete(fileId=old_file['id']).execute()
+                    print(f"  ✅ Removido: {old_file['name']}")
+                
+                print(f"✅ Limpeza concluída. Mantidos os 15 backups mais recentes.")
+            else:
+                print("ℹ️  Nenhum backup antigo para remover.")
+                
+        except Exception as e:
+            print(f"⚠️  Aviso: Não foi possível limpar backups antigos: {e}")
+            print("💡 Isso não afeta a sincronização principal.")
+        EOF
