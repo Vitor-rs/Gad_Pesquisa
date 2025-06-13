@@ -1,4 +1,4 @@
-name: Github2GDrive Sincronizer
+name: Sync Repository to Google Drive (OAuth2)
 
 on:
   push:
@@ -12,13 +12,15 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Necessário para obter histórico completo do git
       
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
         
-    - name: Github2GDrive
+    - name: Sync to Google Drive
       run: |
         pip install google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 requests
         
@@ -27,11 +29,13 @@ jobs:
         import sys
         import json
         import requests
+        import subprocess
         from datetime import datetime
         from pathlib import Path
         from googleapiclient.discovery import build
-        from googleapiclient.http import MediaFileUpload
+        from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
         from google.oauth2.credentials import Credentials
+        import io
         
         print("🔍 Verificando credenciais OAuth2...")
         print("=" * 60)
@@ -62,6 +66,56 @@ jobs:
         print(f"📍 Repositório: {repo_name}")
         print(f"🔀 Branch: {branch}")
         print(f"📝 Commit: {commit_sha[:8]}")
+        
+        # Obter informações do commit usando git
+        try:
+            # Mensagem do commit
+            commit_message = subprocess.check_output(
+                ['git', 'log', '-1', '--pretty=%B', commit_sha],
+                text=True
+            ).strip()
+            
+            # Autor do commit
+            commit_author = subprocess.check_output(
+                ['git', 'log', '-1', '--pretty=%an <%ae>', commit_sha],
+                text=True
+            ).strip()
+            
+            # Data do commit
+            commit_date = subprocess.check_output(
+                ['git', 'log', '-1', '--pretty=%ai', commit_sha],
+                text=True
+            ).strip()
+            
+            # Arquivos modificados no commit
+            changed_files = subprocess.check_output(
+                ['git', 'diff-tree', '--no-commit-id', '--name-status', '-r', commit_sha],
+                text=True
+            ).strip().split('\n')
+            
+            # Processar lista de arquivos modificados
+            files_info = []
+            for file_line in changed_files:
+                if file_line:
+                    parts = file_line.split('\t')
+                    if len(parts) >= 2:
+                        status = parts[0]
+                        filename = parts[1]
+                        status_emoji = {
+                            'A': '➕',  # Adicionado
+                            'M': '📝',  # Modificado
+                            'D': '❌',  # Deletado
+                            'R': '🔄',  # Renomeado
+                            'C': '📋'   # Copiado
+                        }.get(status[0], '❓')
+                        files_info.append(f"{status_emoji} {filename}")
+            
+        except Exception as e:
+            print(f"⚠️ Aviso ao obter informações do git: {e}")
+            commit_message = "Mensagem não disponível"
+            commit_author = "Autor desconhecido"
+            commit_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            files_info = ["Informações de arquivos não disponíveis"]
         
         # Renovar access token usando refresh token
         print("\n🔄 Renovando access token...")
@@ -198,18 +252,23 @@ jobs:
             repo_folder_id = repo_folders[0]['id']
             print(f"📁 Pasta encontrada: {repo_name} (ID: {repo_folder_id})")
             
-            # Limpar conteúdo existente
+            # Limpar conteúdo existente (exceto o arquivo de histórico)
             print("🧹 Limpando conteúdo anterior...")
             query = f"'{repo_folder_id}' in parents and trashed=false"
             results = service.files().list(q=query, fields='files(id, name)').execute()
             files_to_delete = results.get('files', [])
             
+            history_file_id = None
             for file in files_to_delete:
-                try:
-                    service.files().delete(fileId=file['id']).execute()
-                    print(f"  🗑️  Removido: {file['name']}")
-                except:
-                    pass
+                if file['name'] == '_SYNC_HISTORY.md':
+                    history_file_id = file['id']
+                    print(f"  📋 Mantendo histórico: {file['name']}")
+                else:
+                    try:
+                        service.files().delete(fileId=file['id']).execute()
+                        print(f"  🗑️  Removido: {file['name']}")
+                    except:
+                        pass
         else:
             # Criar nova pasta
             print(f"📁 Criando pasta: {repo_name}")
@@ -226,17 +285,54 @@ jobs:
             ).execute()
             
             repo_folder_id = folder.get('id')
+            history_file_id = None
         
-        # Criar arquivo de informações da sincronização
-        sync_info = "Sincronização automática via GitHub Actions\n\n"
-        sync_info += f"Repositório: {repo_name}\n"
-        sync_info += f"Branch: {branch}\n"
-        sync_info += f"Commit: {commit_sha}\n"
-        sync_info += f"Data/Hora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
-        sync_info += f"Conta: {user_email}\n"
+        # Preparar nova entrada do histórico
+        sync_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+        new_entry = f"\n## 📅 {sync_time}\n\n"
+        new_entry += f"**Commit:** `{commit_sha[:8]}` - {commit_message}\n\n"
+        new_entry += f"**Autor:** {commit_author}\n\n"
+        new_entry += f"**Data do Commit:** {commit_date}\n\n"
+        new_entry += f"**Branch:** `{branch}`\n\n"
+        new_entry += f"**Conta de Sincronização:** {user_email}\n\n"
         
-        with open('_SYNC_INFO.txt', 'w', encoding='utf-8') as f:
-            f.write(sync_info)
+        if files_info:
+            new_entry += "### 📋 Arquivos Modificados:\n\n"
+            for file_info in files_info:
+                new_entry += f"- {file_info}\n"
+        
+        new_entry += "\n---\n"
+        
+        # Buscar histórico existente ou criar novo
+        existing_history = ""
+        if history_file_id:
+            try:
+                # Baixar arquivo existente
+                request = service.files().get_media(fileId=history_file_id)
+                file_handle = io.BytesIO()
+                downloader = MediaIoBaseDownload(file_handle, request)
+                done = False
+                while not done:
+                    status, done = downloader.next_chunk()
+                
+                file_handle.seek(0)
+                existing_history = file_handle.read().decode('utf-8')
+                print("📋 Histórico existente carregado")
+            except Exception as e:
+                print(f"⚠️ Não foi possível carregar histórico existente: {e}")
+        
+        # Se não existe histórico, criar cabeçalho
+        if not existing_history:
+            existing_history = "# 🔄 Histórico de Sincronização\n\n"
+            existing_history += f"Este arquivo mantém um registro histórico de todas as sincronizações do repositório **{repo_name}** com o Google Drive.\n\n"
+            existing_history += "---\n"
+        
+        # Adicionar nova entrada ao histórico
+        updated_history = existing_history + new_entry
+        
+        # Salvar histórico atualizado
+        with open('_SYNC_HISTORY.md', 'w', encoding='utf-8') as f:
+            f.write(updated_history)
         
         # Fazer upload de todos os arquivos
         print("\n📤 Sincronizando arquivos...")
@@ -246,11 +342,12 @@ jobs:
         print("=" * 50)
         print(f"📁 Repositório: {repo_name}")
         print(f"🔀 Branch: {branch}")
-        print(f"📝 Commit: {commit_sha[:8]}")
+        print(f"📝 Commit: {commit_sha[:8]} - {commit_message}")
         print(f"📊 Arquivos processados: {total_uploaded}")
         print(f"👤 Conta: {user_email}")
-        print(f"⏰ Horário: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        print(f"⏰ Horário: {sync_time}")
         print("=" * 50)
         print("✨ Sincronização usando conta institucional concluída!")
+        print("📋 Histórico atualizado em _SYNC_HISTORY.md")
         
         EOF
