@@ -26,20 +26,18 @@ jobs:
         
     - name: Pre-check Environment Variables
       run: |
-        python << EOF
+        python << 'EOF'
         import os
         import sys
         
         print("🔍 Verificando variáveis de ambiente...")
         print("=" * 60)
         
-        # Variáveis necessárias
         required_vars = {
             'GOOGLE_CREDENTIALS': '${{ secrets.GOOGLE_CREDENTIALS }}',
             'GOOGLE_DRIVE_FOLDER_ID': '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'
         }
         
-        # Variáveis opcionais do repositório
         repo_vars = {
             'REPOSITORY_NAME': '${{ github.event.repository.name }}',
             'BRANCH': '${{ github.ref_name }}',
@@ -49,7 +47,6 @@ jobs:
         
         missing_vars = []
         
-        # Verificar variáveis essenciais
         for name, value in required_vars.items():
             if value and value.strip():
                 if 'CREDENTIALS' in name:
@@ -60,12 +57,10 @@ jobs:
                 print(f"❌ {name}: NÃO ENCONTRADA")
                 missing_vars.append(name)
         
-        # Mostrar variáveis do repositório
         print("\n📋 Informações do repositório:")
         for name, value in repo_vars.items():
             print(f"ℹ️  {name}: {value}")
         
-        # Verificar se temos o mínimo necessário
         if missing_vars:
             print(f"\n❌ ERRO: Variáveis essenciais não encontradas: {', '.join(missing_vars)}")
             print("\nVerifique se você configurou os secrets no GitHub:")
@@ -84,7 +79,7 @@ jobs:
         
     - name: Validate Google Drive Connection
       run: |
-        python << EOF
+        python << 'EOF'
         import os
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
@@ -120,7 +115,7 @@ jobs:
         
     - name: Sync Repository to Google Drive Folder
       run: |
-        python << EOF
+        python << 'EOF'
         import os
         from datetime import datetime
         from pathlib import Path
@@ -128,18 +123,16 @@ jobs:
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaFileUpload
         
-        # Configurações
         repo_name = '${{ github.event.repository.name }}'
         branch = '${{ github.ref_name }}'
         commit_sha = '${{ github.sha }}'
-        folder_id = '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'
+        parent_folder_id = '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'
         
         print("🔄 Sincronizando repositório como pasta no Google Drive...")
         print(f"📍 Repositório: {repo_name}")
         print(f"🔀 Branch: {branch}")
         print(f"📝 Commit: {commit_sha[:8]}")
         
-        # Configurar Google Drive
         credentials = service_account.Credentials.from_service_account_file(
             'credentials.json',
             scopes=['https://www.googleapis.com/auth/drive']
@@ -147,8 +140,7 @@ jobs:
         
         service = build('drive', 'v3', credentials=credentials)
         
-        # Verificar se pasta do repositório já existe
-        query = f"name = '{repo_name}' and '{folder_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+        query = f"name = '{repo_name}' and '{parent_folder_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         
         results = service.files().list(
             q=query,
@@ -159,31 +151,41 @@ jobs:
         
         if existing_folders:
             repo_folder_id = existing_folders[0]['id']
-            print(f"📁 Pasta encontrada: {repo_name} (ID: {repo_folder_id})")
+            print(f"📁 Pasta encontrada: {repo_name}")
+            print("🧹 Limpando conteúdo existente...")
             
-            # Limpar conteúdo existente - apenas tentar, ignorar erros de permissão
-            print("🧹 Limpando pasta existente...")
             files_query = f"'{repo_folder_id}' in parents and trashed = false"
-            try:
-                files_to_delete = service.files().list(q=files_query, fields='files(id,name)').execute().get('files', [])
+            files_to_delete = []
+            page_token = None
+            
+            while True:
+                results = service.files().list(
+                    q=files_query,
+                    fields='nextPageToken, files(id,name)',
+                    pageToken=page_token
+                ).execute()
                 
-                for file in files_to_delete:
-                    try:
-                        service.files().delete(fileId=file['id']).execute()
-                        print(f"  🗑️  Removido: {file['name']}")
-                    except Exception as e:
-                        # Apenas avisar, não falhar
-                        print(f"  ⚠️ Não foi possível remover {file['name']}: Sem permissão")
-            except Exception as e:
-                print(f"  ⚠️ Aviso durante limpeza: {str(e)[:50]}...")
+                files_to_delete.extend(results.get('files', []))
+                page_token = results.get('nextPageToken')
+                
+                if not page_token:
+                    break
+            
+            for file in files_to_delete:
+                try:
+                    service.files().delete(fileId=file['id']).execute()
+                except Exception as e:
+                    print(f"  ⚠️  Erro ao remover {file['name']}: {e}")
+            
+            print(f"  ✅ {len(files_to_delete)} arquivo(s) removido(s)")
+            
         else:
-            # Criar nova pasta
-            print(f"📁 Criando pasta: {repo_name}")
+            print(f"📁 Criando nova pasta: {repo_name}")
             
             folder_metadata = {
                 'name': repo_name,
                 'mimeType': 'application/vnd.google-apps.folder',
-                'parents': [folder_id]
+                'parents': [parent_folder_id]
             }
             
             folder = service.files().create(
@@ -192,148 +194,77 @@ jobs:
             ).execute()
             
             repo_folder_id = folder.get('id')
-        
-        # Funções de upload
-        def get_mime_type(file_path):
-            ext = Path(file_path).suffix.lower()
-            mime_types = {
-                '.txt': 'text/plain',
-                '.py': 'text/x-python',
-                '.md': 'text/markdown',
-                '.json': 'application/json',
-                '.yml': 'text/yaml',
-                '.yaml': 'text/yaml',
-                '.html': 'text/html',
-                '.css': 'text/css',
-                '.js': 'application/javascript'
-            }
-            return mime_types.get(ext, 'application/octet-stream')
-        
-        def should_ignore_file(file_path):
-            ignored_files = {'.gitignore', '.gitattributes', 'credentials.json'}
-            ignored_extensions = {'.pyc', '.pyo', '.pyd', '.log', '.tmp'}
+            print(f"✅ Pasta criada com ID: {repo_folder_id}")
+
+        def upload_directory(local_path, parent_id, path_prefix=""):
+            uploaded_count = 0
             
-            name = Path(file_path).name
-            
-            if name in ignored_files:
-                return False  # Manter .gitignore
-            
-            if Path(file_path).suffix in ignored_extensions:
-                return True
+            for item in os.listdir(local_path):
+                item_path = os.path.join(local_path, item)
                 
-            if name.startswith('.') and name not in {'.gitignore'}:
-                return True
+                if item in ['.git', '__pycache__', 'node_modules', '.github', 'credentials.json']:
+                    continue
                 
-            return False
-        
-        def find_existing_file_or_folder(service, parent_id, name):
-            try:
-                query = f"name = '{name}' and '{parent_id}' in parents and trashed = false"
-                results = service.files().list(q=query, fields='files(id,name,mimeType)').execute()
-                files = results.get('files', [])
-                return files[0] if files else None
-            except:
-                return None
-        
-        def upload_file(service, file_path, parent_id, path_prefix=""):
-            try:
-                name = Path(file_path).name
+                if item.startswith('.') and item != '.gitignore':
+                    continue
                 
-                # Verificar se arquivo já existe
-                existing = find_existing_file_or_folder(service, parent_id, name)
-                
-                file_metadata = {'name': name}
-                if not existing:
-                    file_metadata['parents'] = [parent_id]
-                
-                media = MediaFileUpload(
-                    file_path,
-                    mimetype=get_mime_type(file_path),
-                    resumable=True
-                )
-                
-                if existing:
-                    # Tentar atualizar arquivo existente
+                if os.path.isfile(item_path):
+                    if item_path.endswith(('.pyc', '.pyo', '.pyd', '__pycache__', '.tmp', '.log')):
+                        continue
+                    
                     try:
-                        file = service.files().update(
-                            fileId=existing['id'],
-                            media_body=media,
-                            fields='id,name'
-                        ).execute()
-                        print(f"  🔄 {path_prefix}{name}")
-                    except Exception as e:
-                        # Se não conseguir atualizar, criar novo com sufixo
-                        timestamp = datetime.now().strftime('%H%M%S')
-                        new_name = f"{Path(name).stem}_sync_{timestamp}{Path(name).suffix}"
-                        file_metadata['name'] = new_name
-                        file_metadata['parents'] = [parent_id]
+                        ext = Path(item_path).suffix.lower()
+                        mime_types = {
+                            '.txt': 'text/plain',
+                            '.py': 'text/x-python',
+                            '.md': 'text/markdown',
+                            '.json': 'application/json',
+                            '.yml': 'text/yaml',
+                            '.yaml': 'text/yaml',
+                            '.html': 'text/html',
+                            '.css': 'text/css',
+                            '.js': 'application/javascript'
+                        }
+                        mime_type = mime_types.get(ext, 'application/octet-stream')
+                        
+                        file_metadata = {
+                            'name': item,
+                            'parents': [parent_id]
+                        }
+                        
+                        media = MediaFileUpload(item_path, mimetype=mime_type, resumable=True)
                         
                         file = service.files().create(
                             body=file_metadata,
                             media_body=media,
                             fields='id,name'
                         ).execute()
-                        print(f"  ✅ {path_prefix}{new_name} (duplicata resolvida)")
-                else:
-                    # Criar novo arquivo
-                    file = service.files().create(
-                        body=file_metadata,
-                        media_body=media,
-                        fields='id,name'
-                    ).execute()
-                    print(f"  ✅ {path_prefix}{name}")
-                
-                return True
-                
-            except Exception as e:
-                print(f"  ❌ Erro ao enviar {path_prefix}{name}: {str(e)[:50]}...")
-                return False
-        
-        def upload_directory(service, local_path, parent_id, path_prefix=""):
-            uploaded_count = 0
-            
-            for item in sorted(os.listdir(local_path)):
-                # Ignorar pastas/arquivos específicos
-                if item in {'.git', '__pycache__', 'node_modules', '.github'}:
-                    continue
-                
-                item_path = os.path.join(local_path, item)
-                item_relative = os.path.join(path_prefix, item) if path_prefix else item
-                
-                if os.path.isfile(item_path):
-                    if should_ignore_file(item_path):
-                        continue
                         
-                    if upload_file(service, item_path, parent_id, path_prefix):
+                        display_path = f"{path_prefix}/{item}" if path_prefix else item
+                        print(f"  ✅ {display_path}")
                         uploaded_count += 1
                         
+                    except Exception as e:
+                        print(f"  ❌ Erro ao enviar {item}: {str(e)[:50]}...")
+                
                 elif os.path.isdir(item_path):
                     try:
-                        # Verificar se pasta já existe
-                        existing = find_existing_file_or_folder(service, parent_id, item)
+                        folder_metadata = {
+                            'name': item,
+                            'mimeType': 'application/vnd.google-apps.folder',
+                            'parents': [parent_id]
+                        }
                         
-                        if existing and existing.get('mimeType') == 'application/vnd.google-apps.folder':
-                            subfolder_id = existing['id']
-                            print(f"  📁 {item_relative}/ (existente)")
-                        else:
-                            # Criar nova pasta
-                            folder_metadata = {
-                                'name': item,
-                                'mimeType': 'application/vnd.google-apps.folder',
-                                'parents': [parent_id]
-                            }
-                            
-                            subfolder = service.files().create(
-                                body=folder_metadata,
-                                fields='id'
-                            ).execute()
-                            
-                            subfolder_id = subfolder.get('id')
-                            print(f"  📁 {item_relative}/ (nova)")
+                        subfolder = service.files().create(
+                            body=folder_metadata,
+                            fields='id'
+                        ).execute()
                         
-                        # Upload recursivo do conteúdo
-                        sub_count = upload_directory(service, item_path, subfolder_id, 
-                                                   os.path.join(path_prefix, item) if path_prefix else item)
+                        subfolder_id = subfolder.get('id')
+                        display_path = f"{path_prefix}/{item}" if path_prefix else item
+                        print(f"  📁 {display_path}/")
+                        
+                        sub_count = upload_directory(item_path, subfolder_id, display_path)
                         uploaded_count += sub_count
                         
                     except Exception as e:
@@ -341,7 +272,6 @@ jobs:
             
             return uploaded_count
         
-        # Criar arquivo de informações da sincronização
         sync_info = f"""Sincronização automática via GitHub Actions
 
 Repositório: {repo_name}
@@ -354,9 +284,8 @@ Autor: ${{ github.actor }}
         with open('_SYNC_INFO.txt', 'w', encoding='utf-8') as f:
             f.write(sync_info)
         
-        # Fazer upload de todos os arquivos
         print("\n📤 Fazendo upload dos arquivos...")
-        total_uploaded = upload_directory(service, '.', repo_folder_id)
+        total_uploaded = upload_directory('.', repo_folder_id)
         
         print(f"\n✅ Total de arquivos enviados: {total_uploaded}")
         print(f"\n🎉 Sincronização concluída com sucesso!")
@@ -366,7 +295,7 @@ Autor: ${{ github.actor }}
         
     - name: Final Summary and Cleanup
       run: |
-        python << EOF
+        python << 'EOF'
         import os
         from datetime import datetime
         
@@ -382,8 +311,6 @@ Autor: ${{ github.actor }}
         print("=" * 50)
         print("🎉 Sincronização automática concluída!")
         
-        # Limpar arquivos temporários
-        print("\n🧹 Limpando arquivos temporários...")
         temp_files = ['credentials.json', '_SYNC_INFO.txt']
         for file in temp_files:
             if os.path.exists(file):
