@@ -2,8 +2,6 @@
 
 ## Sobre o Projeto
 
-[teste sync drive]
-
 O Sistema GAD é uma solução inovadora para automatizar o gerenciamento de certificados de atividades complementares para estudantes do Instituto Federal de Mato Grosso do Sul (IFMS), Campus Naviraí. Utilizando tecnologias de Inteligência Artificial, como OCR (Reconhecimento Óptico de Caracteres) e NLP (Processamento de Linguagem Natural), o sistema extrai, classifica e valida informações de certificados digitalizados.
 
 ## Diagrama de Casos de Uso
