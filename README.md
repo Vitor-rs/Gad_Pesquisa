@@ -42,10 +42,29 @@ Gad_Pesquisa/
 ├── Diagramas/             # Diagramas do projeto (UML, etc.)
 ├── Fontes_Pesquisa/       # Materiais de pesquisa e referência
 │   ├── Artigos/           # Artigos acadêmicos relacionados
+│   │   └── [Nome_do_Artigo]/  # Cada artigo em sua própria pasta
+│   │       ├── [Nome_do_Artigo].pdf  # Versão PDF do artigo
+│   │       └── [Nome_do_Artigo].md   # Versão Markdown do artigo
 │   ├── Conversas_IAs/     # Registros de conversas com IAs sobre o projeto
-│   └── Diversos/          # Outros materiais de pesquisa
+│   ├── Diversos/          # Outros materiais de pesquisa
+│   └── docs_ifms/         # Documentos específicos do IFMS
 └── README.md              # Este arquivo
 ```
+
+## Organização de Documentos de Pesquisa
+
+### Fluxo de Trabalho para Novos Documentos
+
+1. **Para documentos do IFMS**:
+   - Adicione o arquivo PDF diretamente em `/Fontes_Pesquisa/docs_ifms/`
+
+2. **Para artigos gerais**:
+   - Crie uma pasta em `/Fontes_Pesquisa/Artigos/` com nome normalizado (sem acentos, espaços substituídos por underscores)
+   - Adicione o arquivo PDF com o mesmo nome normalizado que a pasta
+   - Se disponível, adicione também uma versão Markdown do documento
+
+3. **Para conversas com IAs**:
+   - Salve registros de conversas com IAs em `/Fontes_Pesquisa/Conversas_IAs/`
 
 ## Como Contribuir
 
