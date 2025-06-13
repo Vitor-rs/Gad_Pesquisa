@@ -1,4 +1,4 @@
-name: Sync Repository to Google Drive as Folder
+name: Github2GDrive Sincronizer
 
 on:
   push:
@@ -12,180 +12,212 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
       
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
         
-    - name: Install Dependencies
+    - name: Github2GDrive
       run: |
-        pip install google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
+        pip install google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 requests
         
-    - name: Pre-check Environment Variables
-      run: |
         python << 'EOF'
         import os
         import sys
-        
-        print("🔍 Verificando variáveis de ambiente...")
-        print("=" * 60)
-        
-        required_vars = {
-            'GOOGLE_CREDENTIALS': '${{ secrets.GOOGLE_CREDENTIALS }}',
-            'GOOGLE_DRIVE_FOLDER_ID': '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'
-        }
-        
-        repo_vars = {
-            'REPOSITORY_NAME': '${{ github.event.repository.name }}',
-            'BRANCH': '${{ github.ref_name }}',
-            'COMMIT_SHA': '${{ github.sha }}',
-            'ACTOR': '${{ github.actor }}'
-        }
-        
-        missing_vars = []
-        
-        for name, value in required_vars.items():
-            if value and value.strip():
-                if 'CREDENTIALS' in name:
-                    print(f"✅ {name}: {'*' * 8}")
-                else:
-                    print(f"✅ {name}: {value}")
-            else:
-                print(f"❌ {name}: NÃO ENCONTRADA")
-                missing_vars.append(name)
-        
-        print("\n📋 Informações do repositório:")
-        for name, value in repo_vars.items():
-            print(f"ℹ️  {name}: {value}")
-        
-        if missing_vars:
-            print(f"\n❌ ERRO: Variáveis essenciais não encontradas: {', '.join(missing_vars)}")
-            print("\nVerifique se você configurou os secrets no GitHub:")
-            print("- Vá em Settings → Secrets and variables → Actions")
-            print("- Configure GOOGLE_CREDENTIALS e GOOGLE_DRIVE_FOLDER_ID")
-            sys.exit(1)
-        
-        print("\n✅ Todas as variáveis necessárias foram encontradas!")
-        print("🚀 Prosseguindo com a sincronização...")
-        EOF
-        
-    - name: Setup Google Credentials
-      run: |
-        echo '${{ secrets.GOOGLE_CREDENTIALS }}' | base64 -d > credentials.json
-        echo "GOOGLE_APPLICATION_CREDENTIALS=credentials.json" >> $GITHUB_ENV
-        
-    - name: Validate Google Drive Connection
-      run: |
-        python << 'EOF'
-        import os
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-        
-        print("🔗 Testando conexão com Google Drive...")
-        
-        try:
-            credentials = service_account.Credentials.from_service_account_file(
-                'credentials.json',
-                scopes=['https://www.googleapis.com/auth/drive']
-            )
-            
-            service = build('drive', 'v3', credentials=credentials)
-            
-            folder_id = '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'
-            folder_info = service.files().get(fileId=folder_id).execute()
-            
-            print(f"✅ Conexão estabelecida com sucesso!")
-            print(f"📁 Pasta de destino: {folder_info.get('name')}")
-            print(f"🆔 ID da pasta: {folder_id}")
-            
-            permissions = service.permissions().list(fileId=folder_id).execute()
-            print(f"🔐 Permissões configuradas: {len(permissions.get('permissions', []))} entrada(s)")
-            
-        except Exception as e:
-            print(f"❌ Erro ao conectar com Google Drive: {str(e)}")
-            print("\n💡 Possíveis causas:")
-            print("- Credenciais inválidas ou expiradas")
-            print("- Pasta não encontrada ou sem permissão")
-            print("- Google Drive API não habilitada")
-            raise
-        EOF
-        
-    - name: Sync Repository to Google Drive Folder
-      run: |
-        python << 'EOF'
-        import os
+        import json
+        import requests
         from datetime import datetime
         from pathlib import Path
-        from google.oauth2 import service_account
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaFileUpload
+        from google.oauth2.credentials import Credentials
         
+        print("🔍 Verificando credenciais OAuth2...")
+        print("=" * 60)
+        
+        # Configurações do repositório
         repo_name = '${{ github.event.repository.name }}'
         branch = '${{ github.ref_name }}'
         commit_sha = '${{ github.sha }}'
-        parent_folder_id = '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'
+        folder_id = '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'
         
-        print("🔄 Sincronizando repositório como pasta no Google Drive...")
+        # Credenciais OAuth2
+        client_id = '${{ secrets.GOOGLE_CLIENT_ID }}'
+        client_secret = '${{ secrets.GOOGLE_CLIENT_SECRET }}'
+        refresh_token = '${{ secrets.GOOGLE_REFRESH_TOKEN }}'
+        
+        # Verificar se todas as credenciais estão presentes
+        missing_secrets = []
+        if not client_id: missing_secrets.append('GOOGLE_CLIENT_ID')
+        if not client_secret: missing_secrets.append('GOOGLE_CLIENT_SECRET')
+        if not refresh_token: missing_secrets.append('GOOGLE_REFRESH_TOKEN')
+        if not folder_id: missing_secrets.append('GOOGLE_DRIVE_FOLDER_ID')
+        
+        if missing_secrets:
+            print(f"❌ ERRO: Secrets não configurados: {', '.join(missing_secrets)}")
+            sys.exit(1)
+        
+        print("✅ Todas as credenciais encontradas!")
         print(f"📍 Repositório: {repo_name}")
         print(f"🔀 Branch: {branch}")
         print(f"📝 Commit: {commit_sha[:8]}")
         
-        credentials = service_account.Credentials.from_service_account_file(
-            'credentials.json',
+        # Renovar access token usando refresh token
+        print("\n🔄 Renovando access token...")
+        
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'refresh_token': refresh_token,
+            'grant_type': 'refresh_token'
+        }
+        
+        response = requests.post(token_url, data=token_data)
+        
+        if response.status_code != 200:
+            print(f"❌ Erro ao renovar token: {response.text}")
+            sys.exit(1)
+        
+        token_info = response.json()
+        access_token = token_info['access_token']
+        
+        print("✅ Token renovado com sucesso!")
+        
+        # Criar credenciais para Google Drive API
+        credentials = Credentials(
+            token=access_token,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=client_id,
+            client_secret=client_secret,
             scopes=['https://www.googleapis.com/auth/drive']
         )
         
+        # Conectar ao Google Drive
         service = build('drive', 'v3', credentials=credentials)
         
-        query = f"name = '{repo_name}' and '{parent_folder_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+        # Testar conexão
+        try:
+            about = service.about().get(fields='user').execute()
+            user_email = about.get('user', {}).get('emailAddress', 'Desconhecido')
+            print(f"✅ Conectado como: {user_email}")
+        except Exception as e:
+            print(f"❌ Erro na conexão: {e}")
+            sys.exit(1)
         
-        results = service.files().list(
-            q=query,
-            fields='files(id,name)'
-        ).execute()
+        # Verificar pasta de destino
+        try:
+            folder_info = service.files().get(fileId=folder_id).execute()
+            print(f"📁 Pasta encontrada: {folder_info.get('name')}")
+        except Exception as e:
+            print(f"❌ Pasta não encontrada: {e}")
+            sys.exit(1)
         
-        existing_folders = results.get('files', [])
-        
-        if existing_folders:
-            repo_folder_id = existing_folders[0]['id']
-            print(f"📁 Pasta encontrada: {repo_name}")
-            print("🧹 Limpando conteúdo existente...")
+        # Função para upload recursivo
+        def upload_directory(local_path, parent_id, path_prefix=""):
+            uploaded_count = 0
             
-            files_query = f"'{repo_folder_id}' in parents and trashed = false"
-            files_to_delete = []
-            page_token = None
+            for item in sorted(os.listdir(local_path)):
+                # Ignorar arquivos/pastas indesejados
+                if item in ['.git', '__pycache__', 'node_modules', '.github']:
+                    continue
+                if item.startswith('.') and item not in ['.gitignore', '.env.example']:
+                    continue
+                
+                item_path = os.path.join(local_path, item)
+                drive_path = os.path.join(path_prefix, item) if path_prefix else item
+                
+                if os.path.isdir(item_path):
+                    print(f"📂 Processando pasta: {drive_path}")
+                    
+                    # Verificar se pasta já existe
+                    query = f"name='{item}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+                    results = service.files().list(q=query, fields='files(id, name)').execute()
+                    existing_folders = results.get('files', [])
+                    
+                    if existing_folders:
+                        folder_id = existing_folders[0]['id']
+                        print(f"  ♻️  Pasta já existe, usando: {folder_id}")
+                    else:
+                        # Criar nova pasta
+                        folder_metadata = {
+                            'name': item,
+                            'mimeType': 'application/vnd.google-apps.folder',
+                            'parents': [parent_id]
+                        }
+                        folder = service.files().create(body=folder_metadata, fields='id').execute()
+                        folder_id = folder.get('id')
+                        print(f"  ✅ Pasta criada: {folder_id}")
+                    
+                    # Recursivamente fazer upload do conteúdo
+                    uploaded_count += upload_directory(item_path, folder_id, drive_path)
+                    
+                else:
+                    # Arquivo regular
+                    file_size = os.path.getsize(item_path)
+                    print(f"📄 Arquivo: {drive_path} ({file_size:,} bytes)")
+                    
+                    # Verificar se arquivo já existe
+                    query = f"name='{item}' and '{parent_id}' in parents and trashed=false"
+                    results = service.files().list(q=query, fields='files(id, name)').execute()
+                    existing_files = results.get('files', [])
+                    
+                    try:
+                        if existing_files:
+                            # Atualizar arquivo existente
+                            file_id = existing_files[0]['id']
+                            media = MediaFileUpload(item_path, resumable=True)
+                            service.files().update(fileId=file_id, media_body=media).execute()
+                            print(f"  ♻️  Atualizado")
+                        else:
+                            # Criar novo arquivo
+                            file_metadata = {
+                                'name': item,
+                                'parents': [parent_id]
+                            }
+                            media = MediaFileUpload(item_path, resumable=True)
+                            service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+                            print(f"  ✅ Enviado")
+                        
+                        uploaded_count += 1
+                    except Exception as e:
+                        print(f"  ❌ Erro: {e}")
             
-            while True:
-                results = service.files().list(
-                    q=files_query,
-                    fields='nextPageToken, files(id,name)',
-                    pageToken=page_token
-                ).execute()
-                
-                files_to_delete.extend(results.get('files', []))
-                page_token = results.get('nextPageToken')
-                
-                if not page_token:
-                    break
+            return uploaded_count
+        
+        # Verificar se pasta do repositório já existe
+        print(f"\n🔍 Verificando pasta do repositório: {repo_name}")
+        
+        query = f"name='{repo_name}' and '{folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+        results = service.files().list(q=query, fields='files(id, name)').execute()
+        repo_folders = results.get('files', [])
+        
+        if repo_folders:
+            repo_folder_id = repo_folders[0]['id']
+            print(f"📁 Pasta encontrada: {repo_name} (ID: {repo_folder_id})")
+            
+            # Limpar conteúdo existente
+            print("🧹 Limpando conteúdo anterior...")
+            query = f"'{repo_folder_id}' in parents and trashed=false"
+            results = service.files().list(q=query, fields='files(id, name)').execute()
+            files_to_delete = results.get('files', [])
             
             for file in files_to_delete:
                 try:
                     service.files().delete(fileId=file['id']).execute()
-                except Exception as e:
-                    print(f"  ⚠️  Erro ao remover {file['name']}: {e}")
-            
-            print(f"  ✅ {len(files_to_delete)} arquivo(s) removido(s)")
-            
+                    print(f"  🗑️  Removido: {file['name']}")
+                except:
+                    pass
         else:
-            print(f"📁 Criando nova pasta: {repo_name}")
+            # Criar nova pasta
+            print(f"📁 Criando pasta: {repo_name}")
             
             folder_metadata = {
                 'name': repo_name,
                 'mimeType': 'application/vnd.google-apps.folder',
-                'parents': [parent_folder_id]
+                'parents': [folder_id]
             }
             
             folder = service.files().create(
@@ -194,126 +226,31 @@ jobs:
             ).execute()
             
             repo_folder_id = folder.get('id')
-            print(f"✅ Pasta criada com ID: {repo_folder_id}")
-
-        def upload_directory(local_path, parent_id, path_prefix=""):
-            uploaded_count = 0
-            
-            for item in os.listdir(local_path):
-                item_path = os.path.join(local_path, item)
-                
-                if item in ['.git', '__pycache__', 'node_modules', '.github', 'credentials.json']:
-                    continue
-                
-                if item.startswith('.') and item != '.gitignore':
-                    continue
-                
-                if os.path.isfile(item_path):
-                    if item_path.endswith(('.pyc', '.pyo', '.pyd', '__pycache__', '.tmp', '.log')):
-                        continue
-                    
-                    try:
-                        ext = Path(item_path).suffix.lower()
-                        mime_types = {
-                            '.txt': 'text/plain',
-                            '.py': 'text/x-python',
-                            '.md': 'text/markdown',
-                            '.json': 'application/json',
-                            '.yml': 'text/yaml',
-                            '.yaml': 'text/yaml',
-                            '.html': 'text/html',
-                            '.css': 'text/css',
-                            '.js': 'application/javascript'
-                        }
-                        mime_type = mime_types.get(ext, 'application/octet-stream')
-                        
-                        file_metadata = {
-                            'name': item,
-                            'parents': [parent_id]
-                        }
-                        
-                        media = MediaFileUpload(item_path, mimetype=mime_type, resumable=True)
-                        
-                        file = service.files().create(
-                            body=file_metadata,
-                            media_body=media,
-                            fields='id,name'
-                        ).execute()
-                        
-                        display_path = f"{path_prefix}/{item}" if path_prefix else item
-                        print(f"  ✅ {display_path}")
-                        uploaded_count += 1
-                        
-                    except Exception as e:
-                        print(f"  ❌ Erro ao enviar {item}: {str(e)[:50]}...")
-                
-                elif os.path.isdir(item_path):
-                    try:
-                        folder_metadata = {
-                            'name': item,
-                            'mimeType': 'application/vnd.google-apps.folder',
-                            'parents': [parent_id]
-                        }
-                        
-                        subfolder = service.files().create(
-                            body=folder_metadata,
-                            fields='id'
-                        ).execute()
-                        
-                        subfolder_id = subfolder.get('id')
-                        display_path = f"{path_prefix}/{item}" if path_prefix else item
-                        print(f"  📁 {display_path}/")
-                        
-                        sub_count = upload_directory(item_path, subfolder_id, display_path)
-                        uploaded_count += sub_count
-                        
-                    except Exception as e:
-                        print(f"  ❌ Erro ao criar pasta {item}: {str(e)[:50]}...")
-            
-            return uploaded_count
         
-        sync_info = f"""Sincronização automática via GitHub Actions
-
-Repositório: {repo_name}
-Branch: {branch}
-Commit: {commit_sha}
-Data/Hora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
-Autor: ${{ github.actor }}
-"""
+        # Criar arquivo de informações da sincronização
+        sync_info = "Sincronização automática via GitHub Actions\n\n"
+        sync_info += f"Repositório: {repo_name}\n"
+        sync_info += f"Branch: {branch}\n"
+        sync_info += f"Commit: {commit_sha}\n"
+        sync_info += f"Data/Hora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
+        sync_info += f"Conta: {user_email}\n"
         
         with open('_SYNC_INFO.txt', 'w', encoding='utf-8') as f:
             f.write(sync_info)
         
-        print("\n📤 Fazendo upload dos arquivos...")
+        # Fazer upload de todos os arquivos
+        print("\n📤 Sincronizando arquivos...")
         total_uploaded = upload_directory('.', repo_folder_id)
         
-        print(f"\n✅ Total de arquivos enviados: {total_uploaded}")
         print(f"\n🎉 Sincronização concluída com sucesso!")
-        print(f"📁 Pasta no Drive: {repo_name}")
-        print(f"🔗 Localização: Sistema_GAD/Repositorios_Github_Gad/{repo_name}")
-        EOF
-        
-    - name: Final Summary and Cleanup
-      run: |
-        python << 'EOF'
-        import os
-        from datetime import datetime
-        
-        print("\n📋 RESUMO DA SINCRONIZAÇÃO")
         print("=" * 50)
-        print(f"✅ Status: Concluída com sucesso")
+        print(f"📁 Repositório: {repo_name}")
+        print(f"🔀 Branch: {branch}")
+        print(f"📝 Commit: {commit_sha[:8]}")
+        print(f"📊 Arquivos processados: {total_uploaded}")
+        print(f"👤 Conta: {user_email}")
         print(f"⏰ Horário: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        print(f"🏢 Repositório: ${{ github.event.repository.name }}")
-        print(f"🌿 Branch: ${{ github.ref_name }}")
-        print(f"📝 Commit: ${{ github.sha }}")
-        print(f"👤 Autor: ${{ github.actor }}")
-        print(f"🎯 Destino: Google Drive/Sistema_GAD/Repositorios_Github_Gad")
         print("=" * 50)
-        print("🎉 Sincronização automática concluída!")
+        print("✨ Sincronização usando conta institucional concluída!")
         
-        temp_files = ['credentials.json', '_SYNC_INFO.txt']
-        for file in temp_files:
-            if os.path.exists(file):
-                os.remove(file)
-                print(f"🗑️  Removido: {file}")
         EOF
