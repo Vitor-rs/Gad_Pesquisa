@@ -1,58 +1,50 @@
-name: Sync Repository to Google Drive (OAuth2)
+name: Bidirectional Sync GitHub ↔ Google Drive
 
 on:
   push:
     branches: [ main, master ]
+  schedule:
+    # Executar a cada 15 minutos para detectar mudanças no Drive
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 jobs:
-  sync-to-drive:
+  sync-bidirectional:
     runs-on: ubuntu-latest
     
-    # PROTEÇÃO ANTI-LOOP: Pula execução se o commit veio do Google Drive
+    # Pula apenas se o commit anterior foi feito pelo próprio bot de sincronização
     if: |
-      !contains(github.event.head_commit.message, '[🗃️gdrive]') && 
-      !contains(github.event.head_commit.message, '[skip ci]') &&
-      !contains(github.event.head_commit.message, '[skip-ci]') &&
-      github.event.head_commit.author.email != 'drive-sync@gad-pesquisa.bot'
+      github.event_name == 'schedule' || 
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && !contains(github.event.head_commit.message, '[sync-bot]'))
     
     steps:
-    - name: Log Sync Information
-      run: |
-        echo "═══════════════════════════════════════════════════════════════"
-        echo "🔄 SINCRONIZAÇÃO GITHUB → GOOGLE DRIVE"
-        echo "═══════════════════════════════════════════════════════════════"
-        echo "📝 Mensagem do Commit: ${{ github.event.head_commit.message }}"
-        echo "👤 Autor: ${{ github.event.head_commit.author.name }} <${{ github.event.head_commit.author.email }}>"
-        echo "🔗 SHA: ${{ github.sha }}"
-        echo "🌿 Branch: ${{ github.ref_name }}"
-        echo "✅ Este commit NÃO veio do Drive - Sincronização autorizada"
-        echo "═══════════════════════════════════════════════════════════════"
-        
     - name: Checkout Repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Necessário para obter histórico completo do git
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
       
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
         
-    - name: Sync to Google Drive
+    - name: Bidirectional Sync
       env:
-        # Adicionar uma flag para indicar que esta execução veio do GitHub Actions
-        SYNC_SOURCE: 'github-actions'
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        pip install google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 requests
+        pip install google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 requests python-dateutil
         
         python << 'EOF'
         import os
         import sys
         import json
+        import hashlib
         import requests
         import subprocess
-        from datetime import datetime
+        from datetime import datetime, timezone
+        from dateutil import parser
         from pathlib import Path
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
@@ -60,23 +52,26 @@ jobs:
         import io
         import time
         
-        print("🔍 Verificando credenciais OAuth2...")
+        print("🔄 SINCRONIZAÇÃO BIDIRECIONAL GITHUB ↔ GOOGLE DRIVE")
         print("=" * 60)
         
-        # Configurações do repositório - usando as mesmas variáveis do Colab
-        repo_name = 'Gad_Pesquisa'  # NOME_REPO
-        branch = 'main'  # BRANCH_PADRAO
-        commit_sha = '${{ github.sha }}'
+        # Configurações
+        repo_name = 'Gad_Pesquisa'
+        branch = 'main'
         folder_id = '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'
-        github_username = 'Vitor-rs'  # GITHUB_USERNAME
-        github_email = 'vitor.santos9@estudante.ifms.edu.br'  # GITHUB_EMAIL
+        github_username = 'Vitor-rs'
+        github_email = 'vitor.santos9@estudante.ifms.edu.br'
         
         # Credenciais OAuth2
         client_id = '${{ secrets.GOOGLE_CLIENT_ID }}'
         client_secret = '${{ secrets.GOOGLE_CLIENT_SECRET }}'
         refresh_token = '${{ secrets.GOOGLE_REFRESH_TOKEN }}'
         
-        # Verificar se todas as credenciais estão presentes
+        # Arquivos de controle
+        SYNC_STATE_FILE = '.sync_state.json'
+        SYNC_HISTORY_FILE = '_SYNC_HISTORY.md'
+        
+        # Verificar credenciais
         missing_secrets = []
         if not client_id: missing_secrets.append('GOOGLE_CLIENT_ID')
         if not client_secret: missing_secrets.append('GOOGLE_CLIENT_SECRET')
@@ -87,65 +82,8 @@ jobs:
             print(f"❌ ERRO: Secrets não configurados: {', '.join(missing_secrets)}")
             sys.exit(1)
         
-        print("✅ Todas as credenciais encontradas!")
-        print(f"📍 Repositório: {repo_name}")
-        print(f"🔀 Branch: {branch}")
-        print(f"📝 Commit: {commit_sha[:8]}")
-        print(f"👤 Usuário: {github_username} <{github_email}>")
-        
-        # Obter informações do commit usando git
-        try:
-            # Mensagem do commit
-            commit_message = subprocess.check_output(
-                ['git', 'log', '-1', '--pretty=%B', commit_sha],
-                text=True
-            ).strip()
-            
-            # Autor do commit
-            commit_author = subprocess.check_output(
-                ['git', 'log', '-1', '--pretty=%an <%ae>', commit_sha],
-                text=True
-            ).strip()
-            
-            # Data do commit
-            commit_date = subprocess.check_output(
-                ['git', 'log', '-1', '--pretty=%ai', commit_sha],
-                text=True
-            ).strip()
-            
-            # Arquivos modificados no commit
-            changed_files = subprocess.check_output(
-                ['git', 'diff-tree', '--no-commit-id', '--name-status', '-r', commit_sha],
-                text=True
-            ).strip().split('\n')
-            
-            # Processar lista de arquivos modificados
-            files_info = []
-            for file_line in changed_files:
-                if file_line:
-                    parts = file_line.split('\t')
-                    if len(parts) >= 2:
-                        status = parts[0]
-                        filename = parts[1]
-                        status_emoji = {
-                            'A': '➕',  # Adicionado
-                            'M': '📝',  # Modificado
-                            'D': '❌',  # Deletado
-                            'R': '🔄',  # Renomeado
-                            'C': '📋'   # Copiado
-                        }.get(status[0], '❓')
-                        files_info.append(f"{status_emoji} {filename}")
-            
-        except Exception as e:
-            print(f"⚠️ Aviso ao obter informações do git: {e}")
-            commit_message = "Mensagem não disponível"
-            commit_author = f"{github_username} <{github_email}>"
-            commit_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            files_info = ["Informações de arquivos não disponíveis"]
-        
-        # Renovar access token usando refresh token
-        print("\n🔄 Renovando access token...")
-        
+        # Renovar access token
+        print("🔄 Renovando access token...")
         token_url = "https://oauth2.googleapis.com/token"
         token_data = {
             'client_id': client_id,
@@ -155,17 +93,14 @@ jobs:
         }
         
         response = requests.post(token_url, data=token_data)
-        
         if response.status_code != 200:
             print(f"❌ Erro ao renovar token: {response.text}")
             sys.exit(1)
         
-        token_info = response.json()
-        access_token = token_info['access_token']
-        
+        access_token = response.json()['access_token']
         print("✅ Token renovado com sucesso!")
         
-        # Criar credenciais para Google Drive API
+        # Criar credenciais e serviço
         credentials = Credentials(
             token=access_token,
             refresh_token=refresh_token,
@@ -175,263 +110,397 @@ jobs:
             scopes=['https://www.googleapis.com/auth/drive']
         )
         
-        # Conectar ao Google Drive
         service = build('drive', 'v3', credentials=credentials)
         
-        # Testar conexão
-        try:
-            about = service.about().get(fields='user').execute()
-            user_email = about.get('user', {}).get('emailAddress', 'Desconhecido')
-            print(f"✅ Conectado como: {user_email}")
-        except Exception as e:
-            print(f"❌ Erro na conexão: {e}")
-            sys.exit(1)
+        # Funções auxiliares
+        def calculate_file_hash(file_path):
+            """Calcula hash MD5 de um arquivo"""
+            hash_md5 = hashlib.md5()
+            with open(file_path, "rb") as f:
+                for chunk in iter(lambda: f.read(4096), b""):
+                    hash_md5.update(chunk)
+            return hash_md5.hexdigest()
         
-        # Verificar pasta de destino
-        try:
-            folder_info = service.files().get(fileId=folder_id).execute()
-            print(f"📁 Pasta encontrada: {folder_info.get('name')}")
-        except Exception as e:
-            print(f"❌ Pasta não encontrada: {e}")
-            sys.exit(1)
-        
-        # Criar arquivo de controle para evitar loops
-        def create_sync_control_file(repo_folder_id):
-            control_content = {
-                "source": "github-actions",
-                "timestamp": datetime.now().isoformat(),
-                "commit_sha": commit_sha,
-                "message": commit_message,
-                "expires": (datetime.now().timestamp() + 300)  # 5 minutos
-            }
-            
-            control_file_name = '.github_sync_control'
-            
-            # Verificar se arquivo já existe
-            query = f"name='{control_file_name}' and '{repo_folder_id}' in parents and trashed=false"
-            results = service.files().list(q=query, fields='files(id)').execute()
-            existing_files = results.get('files', [])
-            
+        def get_drive_file_hash(file_id):
+            """Obtém hash MD5 de um arquivo no Drive"""
             try:
-                if existing_files:
-                    # Atualizar arquivo existente
-                    file_id = existing_files[0]['id']
-                    media = MediaIoBaseUpload(
-                        io.BytesIO(json.dumps(control_content).encode('utf-8')),
-                        mimetype='application/json',
-                        resumable=True
-                    )
-                    service.files().update(fileId=file_id, media_body=media).execute()
-                else:
-                    # Criar novo arquivo
-                    file_metadata = {
-                        'name': control_file_name,
-                        'parents': [repo_folder_id],
-                        'mimeType': 'application/json'
+                file_metadata = service.files().get(fileId=file_id, fields='md5Checksum').execute()
+                return file_metadata.get('md5Checksum', '')
+            except:
+                return ''
+        
+        def load_sync_state():
+            """Carrega estado anterior da sincronização"""
+            if os.path.exists(SYNC_STATE_FILE):
+                with open(SYNC_STATE_FILE, 'r') as f:
+                    return json.load(f)
+            return {'files': {}, 'last_sync': None}
+        
+        def save_sync_state(state):
+            """Salva estado atual da sincronização"""
+            state['last_sync'] = datetime.now(timezone.utc).isoformat()
+            with open(SYNC_STATE_FILE, 'w') as f:
+                json.dump(state, f, indent=2)
+        
+        def should_ignore_file(file_path):
+            """Verifica se arquivo deve ser ignorado"""
+            ignore_patterns = [
+                '.git/', '__pycache__/', 'node_modules/', '.github/',
+                '.DS_Store', 'Thumbs.db', '~$', '.tmp', '.cache',
+                SYNC_STATE_FILE, '.sync.lock'
+            ]
+            return any(pattern in str(file_path) for pattern in ignore_patterns)
+        
+        def get_local_files():
+            """Obtém lista de arquivos locais com hashes"""
+            local_files = {}
+            for path in Path('.').rglob('*'):
+                if path.is_file() and not should_ignore_file(path):
+                    rel_path = str(path).replace('\\', '/')
+                    local_files[rel_path] = {
+                        'path': rel_path,
+                        'hash': calculate_file_hash(path),
+                        'size': path.stat().st_size,
+                        'modified': datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
                     }
-                    media = MediaIoBaseUpload(
-                        io.BytesIO(json.dumps(control_content).encode('utf-8')),
-                        mimetype='application/json',
-                        resumable=True
-                    )
-                    service.files().create(body=file_metadata, media_body=media).execute()
-                
-                print(f"✅ Arquivo de controle criado/atualizado")
-            except Exception as e:
-                print(f"⚠️ Erro ao criar arquivo de controle: {e}")
+            return local_files
         
-        # Função para upload recursivo com proteção anti-loop
-        def upload_directory(local_path, parent_id, path_prefix=""):
-            uploaded_count = 0
+        def get_drive_files(parent_id, path=''):
+            """Obtém lista de arquivos do Drive recursivamente"""
+            drive_files = {}
             
-            for item in sorted(os.listdir(local_path)):
-                # Ignorar arquivos/pastas indesejados
-                if item in ['.git', '__pycache__', 'node_modules', '.github']:
-                    continue
-                if item.startswith('.') and item not in ['.gitignore', '.env.example']:
-                    continue
-                
-                item_path = os.path.join(local_path, item)
-                drive_path = os.path.join(path_prefix, item) if path_prefix else item
-                
-                if os.path.isdir(item_path):
-                    print(f"📂 Processando pasta: {drive_path}")
+            # Listar arquivos
+            query = f"'{parent_id}' in parents and trashed=false"
+            results = service.files().list(
+                q=query,
+                fields='files(id, name, mimeType, md5Checksum, size, modifiedTime)',
+                pageSize=1000
+            ).execute()
+            
+            for file in results.get('files', []):
+                if file['mimeType'] == 'application/vnd.google-apps.folder':
+                    # Recursivamente processar subpastas
+                    subfolder_path = f"{path}/{file['name']}" if path else file['name']
+                    drive_files.update(get_drive_files(file['id'], subfolder_path))
+                else:
+                    # Ignorar Google Docs nativos
+                    if file['mimeType'].startswith('application/vnd.google-apps'):
+                        continue
                     
-                    # Verificar se pasta já existe
-                    query = f"name='{item}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-                    results = service.files().list(q=query, fields='files(id, name)').execute()
-                    existing_folders = results.get('files', [])
-                    
-                    if existing_folders:
-                        folder_id = existing_folders[0]['id']
-                        print(f"  ♻️  Pasta já existe, usando: {folder_id}")
-                    else:
-                        # Criar nova pasta
-                        folder_metadata = {
-                            'name': item,
-                            'mimeType': 'application/vnd.google-apps.folder',
-                            'parents': [parent_id]
+                    file_path = f"{path}/{file['name']}" if path else file['name']
+                    if not should_ignore_file(file_path):
+                        drive_files[file_path] = {
+                            'id': file['id'],
+                            'path': file_path,
+                            'hash': file.get('md5Checksum', ''),
+                            'size': int(file.get('size', 0)),
+                            'modified': file.get('modifiedTime', '')
                         }
-                        folder = service.files().create(body=folder_metadata, fields='id').execute()
-                        folder_id = folder.get('id')
-                        print(f"  ✅ Pasta criada: {folder_id}")
-                    
-                    # Recursivamente fazer upload do conteúdo
-                    uploaded_count += upload_directory(item_path, folder_id, drive_path)
-                    
-                else:
-                    # Arquivo regular
-                    file_size = os.path.getsize(item_path)
-                    print(f"📄 Arquivo: {drive_path} ({file_size:,} bytes)")
-                    
-                    # Verificar se arquivo já existe
-                    query = f"name='{item}' and '{parent_id}' in parents and trashed=false"
-                    results = service.files().list(q=query, fields='files(id, name)').execute()
-                    existing_files = results.get('files', [])
-                    
-                    try:
-                        if existing_files:
-                            # Atualizar arquivo existente
-                            file_id = existing_files[0]['id']
-                            media = MediaFileUpload(item_path, resumable=True)
-                            service.files().update(fileId=file_id, media_body=media).execute()
-                            print(f"  ♻️  Atualizado")
-                        else:
-                            # Criar novo arquivo
-                            file_metadata = {
-                                'name': item,
-                                'parents': [parent_id]
-                            }
-                            media = MediaFileUpload(item_path, resumable=True)
-                            service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-                            print(f"  ✅ Enviado")
-                        
-                        uploaded_count += 1
-                    except Exception as e:
-                        print(f"  ❌ Erro: {e}")
             
-            return uploaded_count
+            return drive_files
         
-        # Verificar se pasta do repositório já existe
+        def download_from_drive(file_id, local_path):
+            """Baixa arquivo do Drive"""
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            request = service.files().get_media(fileId=file_id)
+            with open(local_path, 'wb') as f:
+                downloader = MediaIoBaseDownload(f, request)
+                done = False
+                while not done:
+                    status, done = downloader.next_chunk()
+        
+        def upload_to_drive(local_path, parent_id, file_id=None):
+            """Faz upload de arquivo para o Drive"""
+            file_metadata = {'name': os.path.basename(local_path)}
+            if not file_id:
+                file_metadata['parents'] = [parent_id]
+            
+            media = MediaFileUpload(local_path, resumable=True)
+            
+            if file_id:
+                # Atualizar arquivo existente
+                return service.files().update(
+                    fileId=file_id,
+                    media_body=media
+                ).execute()
+            else:
+                # Criar novo arquivo
+                return service.files().create(
+                    body=file_metadata,
+                    media_body=media,
+                    fields='id'
+                ).execute()
+        
+        def ensure_drive_folder_structure(path, parent_id):
+            """Garante que a estrutura de pastas existe no Drive"""
+            parts = path.split('/')
+            current_parent = parent_id
+            
+            for i, part in enumerate(parts[:-1]):
+                folder_path = '/'.join(parts[:i+1])
+                
+                # Verificar se pasta existe
+                query = f"name='{part}' and '{current_parent}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+                results = service.files().list(q=query, fields='files(id)').execute()
+                
+                if results.get('files'):
+                    current_parent = results['files'][0]['id']
+                else:
+                    # Criar pasta
+                    folder_metadata = {
+                        'name': part,
+                        'mimeType': 'application/vnd.google-apps.folder',
+                        'parents': [current_parent]
+                    }
+                    folder = service.files().create(body=folder_metadata, fields='id').execute()
+                    current_parent = folder['id']
+            
+            return current_parent
+        
+        def delete_from_drive(file_id):
+            """Remove arquivo do Drive"""
+            try:
+                service.files().delete(fileId=file_id).execute()
+                return True
+            except:
+                return False
+        
+        # Verificar pasta do repositório no Drive
         print(f"\n🔍 Verificando pasta do repositório: {repo_name}")
-        
         query = f"name='{repo_name}' and '{folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-        results = service.files().list(q=query, fields='files(id, name)').execute()
-        repo_folders = results.get('files', [])
+        results = service.files().list(q=query, fields='files(id)').execute()
         
-        if repo_folders:
-            repo_folder_id = repo_folders[0]['id']
-            print(f"📁 Pasta encontrada: {repo_name} (ID: {repo_folder_id})")
-            
-            # Criar arquivo de controle ANTES de limpar
-            create_sync_control_file(repo_folder_id)
-            
-            # Aguardar um momento para garantir que o arquivo foi criado
-            time.sleep(2)
-            
-            # Limpar conteúdo existente (exceto arquivos de controle)
-            print("🧹 Limpando conteúdo anterior...")
-            query = f"'{repo_folder_id}' in parents and trashed=false"
-            results = service.files().list(q=query, fields='files(id, name)').execute()
-            files_to_delete = results.get('files', [])
-            
-            history_file_id = None
-            for file in files_to_delete:
-                # Preservar arquivos importantes
-                if file['name'] in ['_SYNC_HISTORY.md', '.github_sync_control', '.last_sync_from_github']:
-                    if file['name'] == '_SYNC_HISTORY.md':
-                        history_file_id = file['id']
-                    print(f"  📋 Mantendo: {file['name']}")
-                else:
-                    try:
-                        service.files().delete(fileId=file['id']).execute()
-                        print(f"  🗑️  Removido: {file['name']}")
-                    except:
-                        pass
+        if results.get('files'):
+            repo_folder_id = results['files'][0]['id']
+            print(f"📁 Pasta encontrada: {repo_name}")
         else:
-            # Criar nova pasta
-            print(f"📁 Criando pasta: {repo_name}")
-            
+            # Criar pasta do repositório
             folder_metadata = {
                 'name': repo_name,
                 'mimeType': 'application/vnd.google-apps.folder',
                 'parents': [folder_id]
             }
+            folder = service.files().create(body=folder_metadata, fields='id').execute()
+            repo_folder_id = folder['id']
+            print(f"📁 Pasta criada: {repo_name}")
+        
+        # Carregar estado anterior
+        sync_state = load_sync_state()
+        previous_files = sync_state.get('files', {})
+        
+        # Obter arquivos atuais
+        print("\n📊 Analisando arquivos...")
+        local_files = get_local_files()
+        drive_files = get_drive_files(repo_folder_id)
+        
+        print(f"  📂 Arquivos locais: {len(local_files)}")
+        print(f"  ☁️ Arquivos no Drive: {len(drive_files)}")
+        
+        # Detectar mudanças
+        changes = {
+            'local_to_drive': [],  # Arquivos para enviar ao Drive
+            'drive_to_local': [],  # Arquivos para baixar do Drive
+            'conflicts': [],       # Arquivos modificados em ambos
+            'delete_from_drive': [],  # Arquivos para deletar do Drive
+            'delete_from_local': []   # Arquivos para deletar localmente
+        }
+        
+        # Analisar cada arquivo
+        all_paths = set(local_files.keys()) | set(drive_files.keys()) | set(previous_files.keys())
+        
+        for path in all_paths:
+            in_local = path in local_files
+            in_drive = path in drive_files
+            in_previous = path in previous_files
             
-            folder = service.files().create(
-                body=folder_metadata,
-                fields='id'
-            ).execute()
+            if in_local and in_drive:
+                # Arquivo existe em ambos
+                if local_files[path]['hash'] != drive_files[path]['hash']:
+                    # Arquivo foi modificado
+                    local_modified = parser.parse(local_files[path]['modified'])
+                    drive_modified = parser.parse(drive_files[path]['modified'])
+                    
+                    if in_previous:
+                        # Verificar qual foi modificado
+                        if local_files[path]['hash'] != previous_files[path].get('local_hash'):
+                            if drive_files[path]['hash'] != previous_files[path].get('drive_hash'):
+                                # Ambos foram modificados - conflito
+                                changes['conflicts'].append(path)
+                            else:
+                                # Apenas local foi modificado
+                                changes['local_to_drive'].append(path)
+                        elif drive_files[path]['hash'] != previous_files[path].get('drive_hash'):
+                            # Apenas Drive foi modificado
+                            changes['drive_to_local'].append(path)
+                    else:
+                        # Sem histórico, usar timestamp mais recente
+                        if local_modified > drive_modified:
+                            changes['local_to_drive'].append(path)
+                        else:
+                            changes['drive_to_local'].append(path)
             
-            repo_folder_id = folder.get('id')
-            history_file_id = None
+            elif in_local and not in_drive:
+                # Arquivo apenas local
+                if in_previous and previous_files[path].get('drive_hash'):
+                    # Foi deletado do Drive
+                    changes['delete_from_local'].append(path)
+                else:
+                    # Novo arquivo local
+                    changes['local_to_drive'].append(path)
             
-            # Criar arquivo de controle na nova pasta
-            create_sync_control_file(repo_folder_id)
+            elif in_drive and not in_local:
+                # Arquivo apenas no Drive
+                if in_previous and previous_files[path].get('local_hash'):
+                    # Foi deletado localmente
+                    changes['delete_from_drive'].append(path)
+                else:
+                    # Novo arquivo no Drive
+                    changes['drive_to_local'].append(path)
         
-        # Preparar nova entrada do histórico
-        sync_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
-        new_entry = f"\n## 📅 {sync_time} [GitHub Actions]\n\n"
-        new_entry += f"**Commit:** `{commit_sha[:8]}` - {commit_message}\n\n"
-        new_entry += f"**Autor:** {commit_author}\n\n"
-        new_entry += f"**Data do Commit:** {commit_date}\n\n"
-        new_entry += f"**Branch:** `{branch}`\n\n"
-        new_entry += f"**Conta de Sincronização:** {user_email}\n\n"
-        new_entry += f"**Origem:** GitHub Actions → Google Drive\n\n"
+        # Mostrar resumo de mudanças
+        print("\n📋 Mudanças detectadas:")
+        print(f"  ⬆️ Local → Drive: {len(changes['local_to_drive'])}")
+        print(f"  ⬇️ Drive → Local: {len(changes['drive_to_local'])}")
+        print(f"  ⚠️ Conflitos: {len(changes['conflicts'])}")
+        print(f"  🗑️ Deletar do Drive: {len(changes['delete_from_drive'])}")
+        print(f"  🗑️ Deletar local: {len(changes['delete_from_local'])}")
         
-        if files_info:
-            new_entry += "### 📋 Arquivos Modificados:\n\n"
-            for file_info in files_info:
-                new_entry += f"- {file_info}\n"
+        # Resolver conflitos (preferir versão mais recente)
+        for path in changes['conflicts']:
+            local_modified = parser.parse(local_files[path]['modified'])
+            drive_modified = parser.parse(drive_files[path]['modified'])
+            
+            if local_modified > drive_modified:
+                changes['local_to_drive'].append(path)
+                print(f"  ⚠️ Conflito em {path}: usando versão local (mais recente)")
+            else:
+                changes['drive_to_local'].append(path)
+                print(f"  ⚠️ Conflito em {path}: usando versão do Drive (mais recente)")
         
-        new_entry += "\n---\n"
+        # Executar sincronização
+        total_changes = sum(len(changes[k]) for k in changes if k != 'conflicts')
         
-        # Buscar histórico existente ou criar novo
-        existing_history = ""
-        if history_file_id:
-            try:
-                # Baixar arquivo existente
-                request = service.files().get_media(fileId=history_file_id)
-                file_handle = io.BytesIO()
-                downloader = MediaIoBaseDownload(file_handle, request)
-                done = False
-                while not done:
-                    status, done = downloader.next_chunk()
+        if total_changes == 0:
+            print("\n✅ Nenhuma mudança necessária - tudo sincronizado!")
+        else:
+            print(f"\n🔄 Executando {total_changes} operações de sincronização...")
+            
+            # 1. Baixar arquivos do Drive
+            for path in changes['drive_to_local']:
+                print(f"  ⬇️ Baixando: {path}")
+                try:
+                    download_from_drive(drive_files[path]['id'], path)
+                except Exception as e:
+                    print(f"    ❌ Erro: {e}")
+            
+            # 2. Fazer upload para o Drive
+            for path in changes['local_to_drive']:
+                print(f"  ⬆️ Enviando: {path}")
+                try:
+                    parent_id = ensure_drive_folder_structure(path, repo_folder_id)
+                    file_id = drive_files.get(path, {}).get('id')
+                    upload_to_drive(path, parent_id, file_id)
+                except Exception as e:
+                    print(f"    ❌ Erro: {e}")
+            
+            # 3. Deletar do Drive
+            for path in changes['delete_from_drive']:
+                print(f"  🗑️ Deletando do Drive: {path}")
+                try:
+                    delete_from_drive(drive_files[path]['id'])
+                except Exception as e:
+                    print(f"    ❌ Erro: {e}")
+            
+            # 4. Deletar localmente
+            for path in changes['delete_from_local']:
+                print(f"  🗑️ Deletando local: {path}")
+                try:
+                    os.remove(path)
+                except Exception as e:
+                    print(f"    ❌ Erro: {e}")
+            
+            # Commit mudanças se necessário
+            if changes['drive_to_local'] or changes['delete_from_local']:
+                print("\n📝 Criando commit com mudanças do Drive...")
                 
-                file_handle.seek(0)
-                existing_history = file_handle.read().decode('utf-8')
-                print("📋 Histórico existente carregado")
-            except Exception as e:
-                print(f"⚠️ Não foi possível carregar histórico existente: {e}")
+                # Configurar git
+                subprocess.run(['git', 'config', 'user.name', 'Sync Bot'], check=True)
+                subprocess.run(['git', 'config', 'user.email', 'sync-bot@gad-pesquisa.bot'], check=True)
+                
+                # Adicionar mudanças
+                subprocess.run(['git', 'add', '-A'], check=True)
+                
+                # Criar mensagem de commit
+                msg_parts = []
+                if len(changes['drive_to_local']) > 0:
+                    msg_parts.append(f"{len(changes['drive_to_local'])} arquivo(s) do Drive")
+                if len(changes['delete_from_local']) > 0:
+                    msg_parts.append(f"{len(changes['delete_from_local'])} arquivo(s) removido(s)")
+                
+                commit_message = f"[sync-bot] Sincronização automática: {', '.join(msg_parts)}"
+                
+                # Fazer commit
+                result = subprocess.run(['git', 'commit', '-m', commit_message], capture_output=True, text=True)
+                
+                if result.returncode == 0:
+                    print("✅ Commit criado com sucesso")
+                    
+                    # Push
+                    push_result = subprocess.run(['git', 'push', 'origin', branch], capture_output=True, text=True)
+                    if push_result.returncode == 0:
+                        print("✅ Push realizado com sucesso")
+                    else:
+                        print(f"❌ Erro no push: {push_result.stderr}")
+            
+            print("\n✅ Sincronização concluída!")
         
-        # Se não existe histórico, criar cabeçalho
-        if not existing_history:
-            existing_history = "# 🔄 Histórico de Sincronização\n\n"
-            existing_history += f"Este arquivo mantém um registro histórico de todas as sincronizações do repositório **{repo_name}** com o Google Drive.\n\n"
-            existing_history += "---\n"
+        # Salvar novo estado
+        new_state = {
+            'files': {},
+            'last_sync': datetime.now(timezone.utc).isoformat()
+        }
         
-        # Adicionar nova entrada ao histórico
-        updated_history = existing_history + new_entry
+        # Atualizar estado com hashes atuais
+        current_local = get_local_files()
+        current_drive = get_drive_files(repo_folder_id)
         
-        # Salvar histórico atualizado
-        with open('_SYNC_HISTORY.md', 'w', encoding='utf-8') as f:
-            f.write(updated_history)
+        for path in set(current_local.keys()) | set(current_drive.keys()):
+            new_state['files'][path] = {
+                'local_hash': current_local.get(path, {}).get('hash'),
+                'drive_hash': current_drive.get(path, {}).get('hash'),
+                'local_modified': current_local.get(path, {}).get('modified'),
+                'drive_modified': current_drive.get(path, {}).get('modified')
+            }
         
-        # Fazer upload de todos os arquivos
-        print("\n📤 Sincronizando arquivos...")
-        total_uploaded = upload_directory('.', repo_folder_id)
+        save_sync_state(new_state)
         
-        print(f"\n🎉 Sincronização concluída com sucesso!")
-        print("=" * 50)
-        print(f"📁 Repositório: {repo_name}")
-        print(f"🔀 Branch: {branch}")
-        print(f"📝 Commit: {commit_sha[:8]} - {commit_message}")
-        print(f"📊 Arquivos processados: {total_uploaded}")
-        print(f"👤 Conta: {user_email}")
-        print(f"⏰ Horário: {sync_time}")
-        print("=" * 50)
-        print("✨ Sincronização usando conta institucional concluída!")
-        print("📋 Histórico atualizado em _SYNC_HISTORY.md")
-        print("🛡️ Arquivo de controle criado para evitar loops")
+        # Atualizar histórico
+        if total_changes > 0:
+            print("\n📋 Atualizando histórico de sincronização...")
+            
+            history_entry = f"\n## 📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')} [Workflow Bidirecional]\n\n"
+            history_entry += f"**Operações executadas:**\n"
+            if changes['local_to_drive']:
+                history_entry += f"- ⬆️ {len(changes['local_to_drive'])} arquivo(s) enviado(s) para o Drive\n"
+            if changes['drive_to_local']:
+                history_entry += f"- ⬇️ {len(changes['drive_to_local'])} arquivo(s) baixado(s) do Drive\n"
+            if changes['delete_from_drive']:
+                history_entry += f"- 🗑️ {len(changes['delete_from_drive'])} arquivo(s) deletado(s) do Drive\n"
+            if changes['delete_from_local']:
+                history_entry += f"- 🗑️ {len(changes['delete_from_local'])} arquivo(s) deletado(s) localmente\n"
+            history_entry += "\n---\n"
+            
+            # Adicionar ao arquivo de histórico
+            if os.path.exists(SYNC_HISTORY_FILE):
+                with open(SYNC_HISTORY_FILE, 'r') as f:
+                    current_history = f.read()
+            else:
+                current_history = "# 🔄 Histórico de Sincronização\n\nSincronização bidirecional automática entre GitHub e Google Drive.\n\n---\n"
+            
+            with open(SYNC_HISTORY_FILE, 'w') as f:
+                f.write(current_history + history_entry)
+        
+        print("\n✨ Processo de sincronização finalizado!")
+        print(f"⏰ Próxima execução em 15 minutos ou no próximo push")
         
         EOF
