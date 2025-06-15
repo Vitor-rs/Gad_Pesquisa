@@ -18,18 +18,18 @@ jobs:
       with:
         python-version: '3.11'
         
-    - name: Sync to Google Drive with OAuth2
+    - name: Install Dependencies
+      run: |
+        pip install google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
+        
+    - name: Create and Run Sync Script
       env:
         CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
         CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
         FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
       run: |
-        # Instalar dependências necessárias
-        pip install google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
-        
-        # Script Python completo em um único bloco
-        python << 'EOF'
+        cat > sync_drive.py << 'SCRIPT_END'
         import os
         import sys
         import json
@@ -278,19 +278,19 @@ jobs:
             clean_folder_contents(repo_folder_id)
             
             # Criar arquivo de informações da sincronização
-            sync_info = f"""Sincronização Automática - GitHub Actions
-=====================================
-Repositório: {REPO_NAME}
-Branch: {BRANCH}
-Commit: {COMMIT_SHA}
-Autor: {ACTOR}
-Data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
-Conta: {user_email}
-=====================================
-
-Esta pasta é sincronizada automaticamente com o repositório GitHub.
-Alterações feitas diretamente aqui podem ser sobrescritas na próxima sincronização.
-"""
+            sync_info = """Sincronização Automática - GitHub Actions
+        =====================================
+        Repositório: %s
+        Branch: %s
+        Commit: %s
+        Autor: %s
+        Data: %s
+        Conta: %s
+        =====================================
+        
+        Esta pasta é sincronizada automaticamente com o repositório GitHub.
+        Alterações feitas diretamente aqui podem ser sobrescritas na próxima sincronização.
+        """ % (REPO_NAME, BRANCH, COMMIT_SHA, ACTOR, datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'), user_email)
             
             # Upload do arquivo de info
             media = MediaInMemoryUpload(sync_info.encode('utf-8'), mimetype='text/plain')
@@ -343,4 +343,7 @@ Alterações feitas diretamente aqui podem ser sobrescritas na próxima sincroni
             print(f"\n❌ Erro inesperado: {str(e)}")
             sys.exit(1)
         
-        EOF
+        SCRIPT_END
+        
+        # Executar o script
+        python sync_drive.py
