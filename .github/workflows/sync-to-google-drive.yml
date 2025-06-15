@@ -1,4 +1,4 @@
-name: Optimized PDF Sync to Google Drive
+name: Sync Repository to Google Drive (Optimized)
 
 on:
   push:
@@ -6,220 +6,209 @@ on:
   workflow_dispatch:
 
 jobs:
-  sync-pdfs:
+  sync-to-drive:
     runs-on: ubuntu-latest
-    timeout-minutes: 180  # 3 horas para repositórios grandes
+    timeout-minutes: 360  # 6 horas máximo
     
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - name: Checkout Repository
+      uses: actions/checkout@v4
       
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      
-      - name: Install Dependencies
-        run: |
-          pip install google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
-          pip install requests tqdm
-      
-      - name: Count and Categorize Files
-        id: file-analysis
-        run: |
-          pdf_count=$(find . -name "*.pdf" -type f | wc -l)
-          total_size=$(find . -name "*.pdf" -type f -exec du -b {} + | awk '{sum+=$1} END {print sum}')
-          
-          echo "PDF_COUNT=$pdf_count" >> $GITHUB_OUTPUT
-          echo "TOTAL_SIZE_MB=$((total_size / 1024 / 1024))" >> $GITHUB_OUTPUT
-          
-          echo "📊 Análise do Repositório:"
-          echo "- Arquivos PDF encontrados: $pdf_count"
-          echo "- Tamanho total dos PDFs: $((total_size / 1024 / 1024)) MB"
-      
-      - name: Optimized PDF Sync
-        timeout-minutes: 150
-        env:
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-        run: |
-          python3 << 'EOF'
-          import os
-          import time
-          import hashlib
-          import json
-          from pathlib import Path
-          from concurrent.futures import ThreadPoolExecutor, as_completed
-          from threading import Semaphore
-          import random
-          
-          from google.oauth2.credentials import Credentials
-          from google.auth.transport.requests import Request
-          from googleapiclient.discovery import build
-          from googleapiclient.http import MediaFileUpload
-          from googleapiclient.errors import HttpError
-          
-          # Configuração de rate limiting
-          UPLOAD_SEMAPHORE = Semaphore(3)  # Máximo 3 uploads simultâneos
-          REQUEST_DELAY = 1.2  # Delay entre requests (1.2s para ficar abaixo do limite)
-          
-          class OptimizedPDFSync:
-              def __init__(self):
-                  self.setup_credentials()
-                  self.drive_service = build('drive', 'v3', credentials=self.creds)
-                  self.folder_id = os.environ['GOOGLE_DRIVE_FOLDER_ID']
-                  
-              def setup_credentials(self):
-                  """Setup OAuth2 credentials from environment"""
-                  self.creds = Credentials(
-                      token=None,
-                      refresh_token=os.environ['GOOGLE_REFRESH_TOKEN'],
-                      token_uri='https://oauth2.googleapis.com/token',
-                      client_id=os.environ['GOOGLE_CLIENT_ID'],
-                      client_secret=os.environ['GOOGLE_CLIENT_SECRET']
-                  )
-                  self.creds.refresh(Request())
-              
-              def get_file_hash(self, filepath):
-                  """Gera hash MD5 do arquivo PDF"""
-                  hash_md5 = hashlib.md5()
-                  with open(filepath, "rb") as f:
-                      for chunk in iter(lambda: f.read(8192), b""):
-                          hash_md5.update(chunk)
-                  return hash_md5.hexdigest()
-              
-              def check_existing_file(self, filename, file_hash):
-                  """Verifica se arquivo já existe no Drive com mesmo hash"""
-                  try:
-                      query = f"name='{filename}' and parents in '{self.folder_id}' and trashed=false"
-                      results = self.drive_service.files().list(
-                          q=query,
-                          fields="files(id,name,properties,md5Checksum)"
-                      ).execute()
-                      
-                      files = results.get('files', [])
-                      for file in files:
-                          if file.get('md5Checksum') == file_hash:
-                              return file['id']
-                      return None
-                      
-                  except HttpError as e:
-                      print(f"❌ Erro ao verificar arquivo existente {filename}: {e}")
-                      return None
-              
-              def upload_pdf_with_retry(self, pdf_path, max_retries=5):
-                  """Upload PDF com retry exponencial"""
-                  filename = os.path.basename(pdf_path)
-                  file_hash = self.get_file_hash(pdf_path)
-                  
-                  # Verificar se já existe
-                  existing_id = self.check_existing_file(filename, file_hash)
-                  if existing_id:
-                      print(f"⏭️  Pulando {filename} (já existe com mesmo hash)")
-                      return True
-                  
-                  # Upload com retry
-                  for attempt in range(max_retries):
-                      try:
-                          with UPLOAD_SEMAPHORE:
-                              media = MediaFileUpload(
-                                  pdf_path,
-                                  mimetype='application/pdf',
-                                  resumable=True
-                              )
-                              
-                              file_metadata = {
-                                  'name': filename,
-                                  'parents': [self.folder_id],
-                                  'properties': {
-                                      'source': 'github-actions',
-                                      'hash': file_hash,
-                                      'upload_date': time.strftime('%Y-%m-%d %H:%M:%S')
-                                  }
-                              }
-                              
-                              file = self.drive_service.files().create(
-                                  body=file_metadata,
-                                  media_body=media,
-                                  fields='id,name,size'
-                              ).execute()
-                              
-                              size_mb = int(file.get('size', 0)) / 1024 / 1024
-                              print(f"✅ Upload concluído: {filename} ({size_mb:.1f} MB)")
-                              
-                              # Delay para rate limiting
-                              time.sleep(REQUEST_DELAY)
-                              return True
-                              
-                      except HttpError as e:
-                          if e.resp.status in [429, 403, 500, 502, 503, 504]:
-                              wait_time = (2 ** attempt) + random.uniform(0, 2)
-                              print(f"⏳ Rate limit atingido para {filename}. Aguardando {wait_time:.1f}s (tentativa {attempt + 1})")
-                              time.sleep(wait_time)
-                          else:
-                              print(f"❌ Erro permanente no upload de {filename}: {e}")
-                              return False
-                      except Exception as e:
-                          print(f"❌ Erro inesperado no upload de {filename}: {e}")
-                          return False
-                  
-                  print(f"❌ Falha no upload de {filename} após {max_retries} tentativas")
-                  return False
-              
-              def sync_pdfs_optimized(self):
-                  """Sincronização otimizada de PDFs"""
-                  pdf_files = list(Path('.').rglob('*.pdf'))
-                  
-                  if not pdf_files:
-                      print("📝 Nenhum arquivo PDF encontrado no repositório")
-                      return
-                  
-                  print(f"🔄 Iniciando sincronização de {len(pdf_files)} arquivos PDF")
-                  
-                  # Processar em lotes para controlar rate limits
-                  batch_size = 5
-                  successful_uploads = 0
-                  failed_uploads = 0
-                  
-                  for i in range(0, len(pdf_files), batch_size):
-                      batch = pdf_files[i:i + batch_size]
-                      print(f"\n📦 Processando lote {i//batch_size + 1}/{(len(pdf_files) + batch_size - 1)//batch_size}")
-                      
-                      # Usar ThreadPoolExecutor para paralelização controlada
-                      with ThreadPoolExecutor(max_workers=2) as executor:
-                          futures = [executor.submit(self.upload_pdf_with_retry, str(pdf)) for pdf in batch]
-                          
-                          for future in as_completed(futures):
-                              if future.result():
-                                  successful_uploads += 1
-                              else:
-                                  failed_uploads += 1
-                      
-                      # Delay entre lotes para não sobrecarregar a API
-                      if i + batch_size < len(pdf_files):
-                          print("⏸️  Pausa entre lotes para respeitar rate limits...")
-                          time.sleep(10)
-                  
-                  print(f"\n📊 Resumo da sincronização:")
-                  print(f"✅ Uploads bem-sucedidos: {successful_uploads}")
-                  print(f"❌ Uploads falharam: {failed_uploads}")
-                  print(f"📁 Total de arquivos: {len(pdf_files)}")
-          
-          # Executar sincronização otimizada
-          if __name__ == "__main__":
-              sync = OptimizedPDFSync()
-              sync.sync_pdfs_optimized()
-          EOF
-      
-      - name: Cleanup and Summary
-        if: always()
-        run: |
-          echo "🏁 Sincronização concluída!"
-          echo "📊 Estatísticas finais:"
-          echo "- Arquivos PDF processados: ${{ steps.file-analysis.outputs.PDF_COUNT }}"
-          echo "- Tamanho total: ${{ steps.file-analysis.outputs.TOTAL_SIZE_MB }} MB"
-          echo "- Horário: $(date '+%Y-%m-%d %H:%M:%S UTC')"
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install Dependencies
+      run: |
+        pip install google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
+        
+    - name: Setup Google Credentials
+      run: |
+        echo "${{ secrets.GOOGLE_CREDENTIALS }}" | base64 -d > credentials.json
+        echo "GOOGLE_APPLICATION_CREDENTIALS=credentials.json" >> $GITHUB_ENV
+        
+    - name: Incremental Sync with Chunking
+      run: |
+        python << 'EOF'
+        import os
+        import time
+        import hashlib
+        from pathlib import Path
+        from google.oauth2 import serviceaccount
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+        from googleapiclient.errors import HttpError
+        
+        # Configuração
+        credentials = serviceaccount.Credentials.from_service_account_file(
+            'credentials.json',
+            scopes=['https://www.googleapis.com/auth/drive']
+        )
+        service = build('drive', 'v3', credentials=credentials)
+        
+        PARENT_FOLDER_ID = "${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}"
+        REPO_NAME = "${{ github.event.repository.name }}"
+        MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB por arquivo
+        CHUNK_SIZE = 10  # Processar 10 arquivos por vez
+        
+        def get_file_hash(file_path):
+            """Gerar hash MD5 do arquivo para comparação"""
+            hasher = hashlib.md5()
+            with open(file_path, 'rb') as f:
+                for chunk in iter(lambda: f.read(4096), b""):
+                    hasher.update(chunk)
+            return hasher.hexdigest()
+        
+        def find_or_create_folder(name, parent_id):
+            """Encontrar ou criar pasta no Google Drive"""
+            query = f"name='{name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+            results = service.files().list(q=query, fields="files(id,name)").execute()
+            folders = results.get('files', [])
+            
+            if folders:
+                return folders[0]['id']
+            else:
+                folder_metadata = {
+                    'name': name,
+                    'mimeType': 'application/vnd.google-apps.folder',
+                    'parents': [parent_id]
+                }
+                folder = service.files().create(body=folder_metadata, fields='id').execute()
+                return folder.get('id')
+        
+        def upload_file_with_retry(file_path, parent_id, max_retries=3):
+            """Upload arquivo com retry automático"""
+            file_name = os.path.basename(file_path)
+            file_size = os.path.getsize(file_path)
+            
+            # Pular arquivos muito grandes
+            if file_size > MAX_FILE_SIZE:
+                print(f"⚠️ Arquivo muito grande (ignorado): {file_name} ({file_size/1024/1024:.1f}MB)")
+                return None
+            
+            # Verificar se arquivo já existe
+            query = f"name='{file_name}' and '{parent_id}' in parents and trashed=false"
+            existing = service.files().list(q=query, fields="files(id,name)").execute()
+            
+            for attempt in range(max_retries):
+                try:
+                    file_metadata = {
+                        'name': file_name,
+                        'parents': [parent_id]
+                    }
+                    
+                    # Determinar MIME type
+                    mime_type = 'application/octet-stream'
+                    if file_name.endswith('.pdf'):
+                        mime_type = 'application/pdf'
+                    elif file_name.endswith('.py'):
+                        mime_type = 'text/x-python'
+                    elif file_name.endswith('.md'):
+                        mime_type = 'text/markdown'
+                    
+                    media = MediaFileUpload(file_path, mimetype=mime_type, resumable=True)
+                    
+                    if existing.get('files'):
+                        # Atualizar arquivo existente
+                        file_id = existing['files'][0]['id']
+                        file = service.files().update(
+                            fileId=file_id,
+                            body=file_metadata,
+                            media_body=media
+                        ).execute()
+                        print(f"📝 Atualizado: {file_name}")
+                    else:
+                        # Criar novo arquivo
+                        file = service.files().create(
+                            body=file_metadata,
+                            media_body=media,
+                            fields='id,name'
+                        ).execute()
+                        print(f"✅ Enviado: {file_name}")
+                    
+                    return file.get('id')
+                    
+                except HttpError as e:
+                    if e.resp.status == 429:  # Rate limit
+                        wait_time = 2 ** attempt
+                        print(f"⏳ Rate limit - aguardando {wait_time}s...")
+                        time.sleep(wait_time)
+                    else:
+                        print(f"❌ Erro no upload de {file_name}: {e}")
+                        break
+                except Exception as e:
+                    print(f"❌ Erro inesperado em {file_name}: {e}")
+                    break
+            
+            return None
+        
+        # Criar pasta do repositório
+        repo_folder_id = find_or_create_folder(REPO_NAME, PARENT_FOLDER_ID)
+        print(f"📁 Pasta do repositório: {REPO_NAME}")
+        
+        # Coletar todos os arquivos (exceto ignorados)
+        all_files = []
+        ignore_patterns = {'.git', '__pycache__', 'node_modules', '.github', 'credentials.json'}
+        
+        for root, dirs, files in os.walk('.'):
+            # Filtrar diretórios ignorados
+            dirs[:] = [d for d in dirs if d not in ignore_patterns]
+            
+            for file in files:
+                if not any(pattern in file for pattern in ['.pyc', '.tmp']):
+                    file_path = os.path.join(root, file)
+                    all_files.append(file_path)
+        
+        # Separar PDFs dos outros arquivos
+        pdf_files = [f for f in all_files if f.endswith('.pdf')]
+        other_files = [f for f in all_files if not f.endswith('.pdf')]
+        
+        print(f"📊 Total de arquivos: {len(all_files)}")
+        print(f"📄 PDFs: {len(pdf_files)}")
+        print(f"📝 Outros: {len(other_files)}")
+        
+        # Processar outros arquivos primeiro (mais rápido)
+        print("\n🚀 Processando arquivos não-PDF...")
+        for i in range(0, len(other_files), CHUNK_SIZE):
+            chunk = other_files[i:i+CHUNK_SIZE]
+            print(f"📦 Lote {i//CHUNK_SIZE + 1}: {len(chunk)} arquivos")
+            
+            for file_path in chunk:
+                # Criar estrutura de pastas no Drive
+                rel_path = os.path.relpath(file_path, '.')
+                dir_path = os.path.dirname(rel_path)
+                
+                current_folder_id = repo_folder_id
+                if dir_path and dir_path != '.':
+                    for folder_name in dir_path.split(os.sep):
+                        current_folder_id = find_or_create_folder(folder_name, current_folder_id)
+                
+                upload_file_with_retry(file_path, current_folder_id)
+            
+            time.sleep(1)  # Pausa entre lotes
+        
+        # Processar PDFs em lotes menores
+        print("\n📄 Processando arquivos PDF...")
+        pdf_chunk_size = 5  # Lotes menores para PDFs
+        
+        for i in range(0, len(pdf_files), pdf_chunk_size):
+            chunk = pdf_files[i:i+pdf_chunk_size]
+            print(f"📦 Lote PDF {i//pdf_chunk_size + 1}: {len(chunk)} arquivos")
+            
+            for file_path in chunk:
+                rel_path = os.path.relpath(file_path, '.')
+                dir_path = os.path.dirname(rel_path)
+                
+                current_folder_id = repo_folder_id
+                if dir_path and dir_path != '.':
+                    for folder_name in dir_path.split(os.sep):
+                        current_folder_id = find_or_create_folder(folder_name, current_folder_id)
+                
+                upload_file_with_retry(file_path, current_folder_id)
+            
+            time.sleep(2)  # Pausa maior entre lotes de PDF
+        
+        print(f"\n🎉 Sincronização concluída!")
+        print(f"📁 Repositório sincronizado em: Sistema/GAD/RepositoriosGithubGad/{REPO_NAME}")
+        EOF
